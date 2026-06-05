@@ -1,8 +1,8 @@
 import * as fs from 'fs';
 import * as Papa from 'papaparse';
-import { parseDate } from './helper.js';
-import { createKboClient } from '../client.js';
-import type { Establishment } from '../generated/prisma/client.js';
+import { parseDate } from './helper';
+import { createKboClient } from '../client';
+import type { Establishment } from '../generated/prisma/client';
 
 export async function loadEstablismentCSV(filename: string, upsertMode: boolean): Promise<void> {
   const prisma = createKboClient();

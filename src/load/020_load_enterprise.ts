@@ -1,8 +1,8 @@
 import fs from 'fs';
 import Papa from 'papaparse';
-import { parseDate } from './helper.js';
-import { createKboClient } from '../client.js';
-import type { Enterprise } from '../generated/prisma/client.js';
+import { parseDate } from './helper';
+import { createKboClient } from '../client';
+import type { Enterprise } from '../generated/prisma/client';
 
 interface EnterpriseInput {
   EnterpriseNumber: string;

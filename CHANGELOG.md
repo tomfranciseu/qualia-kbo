@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.1
+
+- Remove `.js` import extensions for Next.js `transpilePackages` compatibility
+
 ## 0.1.0
 
 - Initial standalone release extracted from monday2.0

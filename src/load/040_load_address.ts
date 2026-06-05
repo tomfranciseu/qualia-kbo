@@ -1,7 +1,7 @@
 import fs from 'fs';
 import Papa from 'papaparse';
-import { determineEntityType, parseDate } from './helper.js';
-import { createKboClient } from '../client.js';
+import { determineEntityType, parseDate } from './helper';
+import { createKboClient } from '../client';
 
 interface AddressRow {
   EntityNumber: string;

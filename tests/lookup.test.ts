@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { formatEnterpriseNumber, getBelgianEnterpriseNumberFromVat } from '../src/vat.js';
-import { lookupByVatNumber } from '../src/lookup.js';
+import { formatEnterpriseNumber, getBelgianEnterpriseNumberFromVat } from '../src/vat';
+import { lookupByVatNumber } from '../src/lookup';
 
 describe('vat helpers', () => {
   it('normalizes Belgian VAT to enterprise number', () => {

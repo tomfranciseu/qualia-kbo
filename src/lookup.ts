@@ -1,6 +1,6 @@
-import { createKboClient } from './client.js';
-import type { KboAddress, KboContact, KboLookupResult } from './types.js';
-import { formatEnterpriseNumber, getBelgianEnterpriseNumberFromVat } from './vat.js';
+import { createKboClient } from './client';
+import type { KboAddress, KboContact, KboLookupResult } from './types';
+import { formatEnterpriseNumber, getBelgianEnterpriseNumberFromVat } from './vat';
 
 const enterpriseInclude = {
   denominations: true,

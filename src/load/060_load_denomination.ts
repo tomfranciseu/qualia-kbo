@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as Papa from 'papaparse';
-import { determineEntityType } from './helper.js';
-import { createKboClient } from '../client.js';
+import { determineEntityType } from './helper';
+import { createKboClient } from '../client';
 
 type DenominationInput = {
   entityNumber: string;

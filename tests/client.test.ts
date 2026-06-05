@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { checkKboDatabaseHealth } from '../src/client.js';
+import { checkKboDatabaseHealth } from '../src/client';
 
 describe('checkKboDatabaseHealth', () => {
   it('returns false when KBO_DATABASE_URL is unset', async () => {

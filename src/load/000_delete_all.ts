@@ -1,4 +1,4 @@
-import { createKboClient } from '../client.js';
+import { createKboClient } from '../client';
 
 export async function loadDeleteAll(): Promise<void> {
   const prisma = createKboClient();

@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as Papa from 'papaparse';
-import { createKboClient } from '../client.js';
+import { createKboClient } from '../client';
 
 type KBOContactInput = {
   entityNumber: string;

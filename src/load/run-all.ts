@@ -1,13 +1,13 @@
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { disconnectKboClient } from '../client.js';
-import { loadDeleteAll } from './000_delete_all.js';
-import { loadCSV_code } from './010_load_code.js';
-import { loadEnterpriseCSV } from './020_load_enterprise.js';
-import { loadEstablismentCSV } from './030_load_establishment.js';
-import { loadAddressCSV } from './040_load_address.js';
-import { loadContactsCSV } from './050_load_contacts.js';
-import { loadDenominationCSV } from './060_load_denomination.js';
+import { disconnectKboClient } from '../client';
+import { loadDeleteAll } from './000_delete_all';
+import { loadCSV_code } from './010_load_code';
+import { loadEnterpriseCSV } from './020_load_enterprise';
+import { loadEstablismentCSV } from './030_load_establishment';
+import { loadAddressCSV } from './040_load_address';
+import { loadContactsCSV } from './050_load_contacts';
+import { loadDenominationCSV } from './060_load_denomination';
 
 const dataDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../data');
 const upsertMode = process.argv.includes('--upsert');
