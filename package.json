@@ -1,0 +1,51 @@
+{
+  "name": "@qualia/kbo",
+  "version": "0.1.0",
+  "private": false,
+  "type": "module",
+  "description": "Belgian KBO registry — standalone DB, ETL, and lookup",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "files": [
+    "src/index.ts",
+    "src/client.ts",
+    "src/lookup.ts",
+    "src/types.ts",
+    "src/vat.ts",
+    "src/generated",
+    "prisma"
+  ],
+  "scripts": {
+    "generate": "prisma generate",
+    "migrate:dev": "prisma migrate dev",
+    "migrate:deploy": "prisma migrate deploy",
+    "migrate:status": "prisma migrate status",
+    "check:types": "tsc --noEmit",
+    "test": "vitest run",
+    "load:all": "tsx src/load/run-all.ts",
+    "load:delete": "tsx src/load/000_delete_all.ts",
+    "load:codes": "tsx src/load/010_load_code.ts",
+    "load:enterprise": "tsx src/load/020_load_enterprise.ts",
+    "load:establishment": "tsx src/load/030_load_establishment.ts",
+    "load:address": "tsx src/load/040_load_address.ts",
+    "load:contacts": "tsx src/load/050_load_contacts.ts",
+    "load:denomination": "tsx src/load/060_load_denomination.ts",
+    "postinstall": "prisma generate"
+  },
+  "dependencies": {
+    "@prisma/adapter-pg": "^7.8.0",
+    "@prisma/client": "^7.8.0",
+    "dotenv": "^17.4.2",
+    "papaparse": "^5.5.3",
+    "pg": "^8.20.0"
+  },
+  "devDependencies": {
+    "@types/papaparse": "^5.5.2",
+    "@types/pg": "^8.20.0",
+    "prisma": "^7.8.0",
+    "tsx": "^4.21.0",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.5"
+  }
+}

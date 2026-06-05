@@ -1,0 +1,186 @@
+generator client {
+  provider            = "prisma-client"
+  output              = "../src/generated/prisma"
+  engineType          = "client"
+  importFileExtension = "ts"
+}
+
+datasource db {
+  provider = "postgresql"
+  schemas  = ["kbo"]
+}
+
+model Enterprise {
+  enterpriseNumber       String             @id
+  KBOstatusCode          String
+  KBOstatus              KBOStatus          @relation(fields: [KBOstatusCode], references: [code])
+  juridicalSituationCode String
+  juridicalSituation     JuridicalSituation @relation(fields: [juridicalSituationCode], references: [code])
+  typeOfEnterpriseCode   String
+  typeOfEnterprise       TypeOfEnterprise   @relation(fields: [typeOfEnterpriseCode], references: [code])
+  juridicalFormCode      String?
+  juridicalForm          JuridicalForm?     @relation(name: "form", fields: [juridicalFormCode], references: [code])
+  juridicalFormCACCode   String?
+  juridicalFormCAC       JuridicalForm?     @relation(name: "cac", fields: [juridicalFormCACCode], references: [code])
+  startDate              DateTime
+  establishments         Establishment[]
+  denominations          Denomination[]
+  addresses              KBOAddress[]
+  contacts               KBOContact[]
+  branches               Branch[]
+
+  @@schema("kbo")
+}
+
+model Establishment {
+  establishmentNumber String         @id
+  startDate           DateTime
+  enterpriseNumber    String
+  enterprise          Enterprise     @relation(fields: [enterpriseNumber], references: [enterpriseNumber])
+  Denomination        Denomination[]
+  Address             KBOAddress[]
+  KBOContact          KBOContact[]
+
+  @@schema("kbo")
+}
+
+model Denomination {
+  id                     String             @id @default(cuid())
+  entityNumber           String
+  languageCode           String
+  language               Language           @relation(fields: [languageCode], references: [code])
+  typeOfDenominationCode String
+  typeOfDenomination     TypeOfDenomination @relation(fields: [typeOfDenominationCode], references: [code])
+  denomination           String
+  enterpriseId           String?
+  enterprise             Enterprise?        @relation(fields: [enterpriseId], references: [enterpriseNumber], map: "DenominationEntreprise")
+  establishmentId        String?
+  establishment          Establishment?     @relation(fields: [establishmentId], references: [establishmentNumber], map: "DenominationEstablishment")
+
+  @@unique([entityNumber, typeOfDenominationCode, languageCode], name: "entityNumber_language_typeOfDenomination")
+  @@schema("kbo")
+}
+
+model KBOAddress {
+  id                String         @id @default(cuid())
+  entityNumber      String
+  typeOfAddressCode String
+  typeOfAddress     TypeOfAddress  @relation(fields: [typeOfAddressCode], references: [code])
+  countryNL         String?
+  countryFR         String?
+  zipcode           String?
+  municipalityNL    String?
+  municipalityFR    String?
+  streetNL          String?
+  streetFR          String?
+  houseNumber       String?
+  box               String?
+  extraAddressInfo  String?
+  dateStrikingOff   DateTime?
+  enterpriseId      String?        @map("enterpriseNumber")
+  establishmentId   String?        @map("establishmentNumber")
+  enterprise        Enterprise?    @relation(fields: [enterpriseId], references: [enterpriseNumber], map: "AddressEntreprise")
+  establishment     Establishment? @relation(fields: [establishmentId], references: [establishmentNumber], map: "AddressEstablishment")
+
+  @@unique([entityNumber, typeOfAddressCode], name: "entitytypeofaddress_unique")
+  @@schema("kbo")
+}
+
+model KBOContact {
+  id                String         @id @default(cuid())
+  entityNumber      String
+  entityContactCode String
+  entityContact     EntityContact  @relation(fields: [entityContactCode], references: [code])
+  conctactTypeCode  String
+  contactType       ContactType    @relation(fields: [conctactTypeCode], references: [code])
+  value             String
+  enterpriseId      String?
+  enterprise        Enterprise?    @relation(fields: [enterpriseId], references: [enterpriseNumber], map: "KBOContactEntreprise")
+  establishmentId   String?
+  establishment     Establishment? @relation(fields: [establishmentId], references: [establishmentNumber], map: "KBOContactEstablishment")
+
+  @@unique([entityNumber, entityContactCode, conctactTypeCode], name: "entitynumber_contacttype_contact")
+  @@schema("kbo")
+}
+
+model Branch {
+  id               String     @id @default(cuid())
+  startDate        DateTime
+  enterpriseNumber String
+  enterprise       Enterprise @relation(fields: [enterpriseNumber], references: [enterpriseNumber])
+
+  @@schema("kbo")
+}
+
+model ContactType {
+  code        String       @id
+  description String
+  KBOContact  KBOContact[]
+
+  @@schema("kbo")
+}
+
+model EntityContact {
+  code        String       @id
+  description String
+  KBOContact  KBOContact[]
+
+  @@schema("kbo")
+}
+
+model JuridicalForm {
+  code              String       @id
+  description       String
+  EnterpriseForm    Enterprise[] @relation(name: "form")
+  EnterpriseFormCac Enterprise[] @relation(name: "cac")
+
+  @@schema("kbo")
+}
+
+model JuridicalSituation {
+  code        String       @id
+  description String
+  Enterprise  Enterprise[]
+
+  @@schema("kbo")
+}
+
+model Language {
+  code         String         @id
+  description  String
+  Denomination Denomination[]
+
+  @@schema("kbo")
+}
+
+model KBOStatus {
+  code        String       @id
+  description String
+  Enterprise  Enterprise[]
+
+  @@schema("kbo")
+}
+
+model TypeOfAddress {
+  code        String       @id
+  description String
+  KBOAddress  KBOAddress[]
+
+  @@schema("kbo")
+}
+
+model TypeOfDenomination {
+  code         String         @id
+  description  String
+  Denomination Denomination[]
+
+  @@schema("kbo")
+}
+
+model TypeOfEnterprise {
+  code        String       @id
+  description String
+  Enterprise  Enterprise[]
+
+  @@schema("kbo")
+}

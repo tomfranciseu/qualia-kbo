@@ -1,0 +1,48 @@
+name: kbo-ci
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: kbo
+          POSTGRES_PASSWORD: kbo
+          POSTGRES_DB: kbo
+        ports:
+          - 5434:5432
+        options: >-
+          --health-cmd "pg_isready -U kbo -d kbo"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      KBO_DATABASE_URL: postgresql://kbo:kbo@localhost:5434/kbo
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+
+      - name: Set up Node.js
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Apply migrations
+        run: npm run migrate:deploy
+
+      - name: Type check
+        run: npm run check:types
+
+      - name: Run tests
+        run: npm test

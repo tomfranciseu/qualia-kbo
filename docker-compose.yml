@@ -1,0 +1,20 @@
+services:
+  postgresql_kbo:
+    image: postgres:17
+    container_name: pg_kbo_dev
+    environment:
+      POSTGRES_USER: ${KBO_POSTGRES_USER:-kbo}
+      POSTGRES_PASSWORD: ${KBO_POSTGRES_PASSWORD:-kbo}
+      POSTGRES_DB: kbo
+    ports:
+      - "${KBO_POSTGRES_PORT:-5434}:5432"
+    volumes:
+      - postgresql_data_kbo:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${KBO_POSTGRES_USER:-kbo} -d kbo"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgresql_data_kbo:
