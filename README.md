@@ -19,6 +19,8 @@ npm run load:all
 |---|---|---|
 | `KBO_DATABASE_URL` | `postgresql://kbo:kbo@localhost:5434/kbo` | Postgres connection string |
 | `KBO_POSTGRES_PORT` | `5434` | Host port for docker-compose |
+| `NBB_CBSO_SUBSCRIPTION_KEY` | — | NBB CBSO API subscription key (annual accounts) |
+| `NBB_CBSO_BASE_URL` | `https://ws.cbso.nbb.be` | NBB CBSO API base URL (UAT: `https://ws.uat2.cbso.nbb.be`) |
 
 ## Scripts
 
@@ -36,6 +38,19 @@ npm run load:all
 ```
 
 Set `KBO_DATABASE_URL` on the app runtime for Belgian VAT autofill from local KBO data. Without it, the app falls back to VIES.
+
+### NBB annual accounts (financials)
+
+```typescript
+import { fetchCompanyFinancials, checkNbbConfigured } from '@qualia/kbo';
+
+if (checkNbbConfigured()) {
+  const financials = await fetchCompanyFinancials('0123456789', { years: 5 });
+  // financials.years[].revenue, netResult, marginPercent
+}
+```
+
+Set `NBB_CBSO_SUBSCRIPTION_KEY` from the [NBB developer portal](https://developer.cbso.nbb.be).
 
 ## Production operations (deferred)
 

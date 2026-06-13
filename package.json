@@ -1,6 +1,6 @@
 {
   "name": "@qualia/kbo",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "private": false,
   "type": "module",
   "description": "Belgian KBO registry — standalone DB, ETL, and lookup",
@@ -13,6 +13,7 @@
     "src/lookup.ts",
     "src/types.ts",
     "src/vat.ts",
+    "src/nbb",
     "src/generated",
     "prisma"
   ],

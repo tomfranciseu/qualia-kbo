@@ -1,0 +1,8 @@
+{
+  "ReferenceNumber": "2024-00001234",
+  "EnterpriseName": "Acme BV",
+  "Rubrics": [
+    { "Code": "70", "Value": "1000000", "Period": "N" },
+    { "Code": "9904", "Value": "120000", "Period": "N" }
+  ]
+}

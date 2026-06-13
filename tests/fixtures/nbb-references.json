@@ -1,0 +1,43 @@
+[
+  {
+    "ReferenceNumber": "2024-00001234",
+    "DepositDate": "2025-04-10",
+    "ExerciseDates": { "startDate": "2024-01-01", "endDate": "2024-12-31" },
+    "EnterpriseName": "Acme BV",
+    "AccountingDataURL": "https://ws.cbso.nbb.be/authentic/deposit/2024-00001234/accountingData"
+  },
+  {
+    "ReferenceNumber": "2023-00005678",
+    "DepositDate": "2024-05-12",
+    "ExerciseDates": { "startDate": "2023-01-01", "endDate": "2023-12-31" },
+    "EnterpriseName": "Acme BV",
+    "AccountingDataURL": "https://ws.cbso.nbb.be/authentic/deposit/2023-00005678/accountingData"
+  },
+  {
+    "ReferenceNumber": "2022-00009999",
+    "DepositDate": "2023-04-01",
+    "ExerciseDates": { "startDate": "2022-01-01", "endDate": "2022-12-31" },
+    "EnterpriseName": "Acme BV"
+  },
+  {
+    "ReferenceNumber": "2021-00001111",
+    "DepositDate": "2022-06-15",
+    "ExerciseDates": { "startDate": "2021-01-01", "endDate": "2021-12-31" },
+    "EnterpriseName": "Acme BV",
+    "AccountingDataURL": "https://ws.cbso.nbb.be/authentic/deposit/2021-00001111/accountingData"
+  },
+  {
+    "ReferenceNumber": "2020-00002222",
+    "DepositDate": "2021-05-20",
+    "ExerciseDates": { "startDate": "2020-01-01", "endDate": "2020-12-31" },
+    "EnterpriseName": "Acme BV",
+    "AccountingDataURL": "https://ws.cbso.nbb.be/authentic/deposit/2020-00002222/accountingData"
+  },
+  {
+    "ReferenceNumber": "2019-00003333",
+    "DepositDate": "2020-04-18",
+    "ExerciseDates": { "startDate": "2019-01-01", "endDate": "2019-12-31" },
+    "EnterpriseName": "Acme BV",
+    "AccountingDataURL": "https://ws.cbso.nbb.be/authentic/deposit/2019-00003333/accountingData"
+  }
+]
