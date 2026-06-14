@@ -1,10 +1,19 @@
 import type { NbbRubric } from './types';
 
-/** Primary turnover rubric in Belgian abbreviated annual accounts. */
-const REVENUE_CODES = ['70', '700', '7000', '701', '7010'] as const;
+/** Aggregate turnover (70 + 71 + 72 + 74 + 76A) in full/abbreviated annual accounts. */
+const REVENUE_AGGREGATE_CODES = ['70/76A'] as const;
 
-/** Result of the financial year rubrics (profit/loss for the period). */
-const NET_RESULT_CODES = ['9904', '990', '9900', '9087', '9047'] as const;
+/** Turnover rubric codes, tried before summing components. */
+const REVENUE_DIRECT_CODES = ['70', '700', '7000', '701', '7010'] as const;
+
+/** Turnover components summed when no aggregate/direct code is present. */
+const REVENUE_COMPONENT_CODES = ['70', '71', '72', '74', '76A'] as const;
+
+/** Result of the financial year (profit/loss for the period). */
+const NET_RESULT_CODES = ['9904', '990', '9900', '9047'] as const;
+
+/** Average headcount in full-time equivalents (FTE). */
+const EMPLOYEE_COUNT_CODES = ['1003', '9146'] as const;
 
 function parseRubricValue(value: string | undefined): number | null {
   if (value === undefined || value.trim() === '') return null;
@@ -12,8 +21,12 @@ function parseRubricValue(value: string | undefined): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function currentPeriodRubrics(rubrics: NbbRubric[]): NbbRubric[] {
+  return rubrics.filter((r) => !r.Period || r.Period === 'N');
+}
+
 function findRubricValue(rubrics: NbbRubric[], codes: readonly string[]): number | null {
-  const currentPeriod = rubrics.filter((r) => !r.Period || r.Period === 'N');
+  const currentPeriod = currentPeriodRubrics(rubrics);
 
   for (const code of codes) {
     const match = currentPeriod.find((r) => r.Code === code);
@@ -24,14 +37,45 @@ function findRubricValue(rubrics: NbbRubric[], codes: readonly string[]): number
   return null;
 }
 
+function sumRubricComponents(rubrics: NbbRubric[], codes: readonly string[]): number | null {
+  const currentPeriod = currentPeriodRubrics(rubrics);
+  let sum = 0;
+  let found = false;
+
+  for (const code of codes) {
+    const match = currentPeriod.find((r) => r.Code === code);
+    const value = parseRubricValue(match?.Value);
+    if (value !== null) {
+      sum += value;
+      found = true;
+    }
+  }
+
+  return found ? sum : null;
+}
+
 export function extractRevenue(rubrics: NbbRubric[] | undefined): number | null {
   if (!rubrics?.length) return null;
-  return findRubricValue(rubrics, REVENUE_CODES);
+
+  const aggregate = findRubricValue(rubrics, REVENUE_AGGREGATE_CODES);
+  if (aggregate !== null) return aggregate;
+
+  const direct = findRubricValue(rubrics, REVENUE_DIRECT_CODES);
+  if (direct !== null) return direct;
+
+  return sumRubricComponents(rubrics, REVENUE_COMPONENT_CODES);
 }
 
 export function extractNetResult(rubrics: NbbRubric[] | undefined): number | null {
   if (!rubrics?.length) return null;
   return findRubricValue(rubrics, NET_RESULT_CODES);
+}
+
+export function extractEmployeeCount(rubrics: NbbRubric[] | undefined): number | null {
+  if (!rubrics?.length) return null;
+  const value = findRubricValue(rubrics, EMPLOYEE_COUNT_CODES);
+  if (value === null) return null;
+  return Math.round(value * 10) / 10;
 }
 
 export function computeMarginPercent(

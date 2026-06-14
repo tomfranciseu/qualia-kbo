@@ -46,7 +46,7 @@ import { fetchCompanyFinancials, checkNbbConfigured } from '@qualia/kbo';
 
 if (checkNbbConfigured()) {
   const financials = await fetchCompanyFinancials('0123456789', { years: 5 });
-  // financials.years[].revenue, netResult, marginPercent
+  // financials.years[].revenue, netResult, marginPercent, employeeCount
 }
 ```
 

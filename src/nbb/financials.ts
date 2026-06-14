@@ -1,7 +1,12 @@
 import { fetchAccountingData } from './accountingData';
 import { getNbbClientConfig } from './client';
 import { fetchDepositReferences, selectRecentDepositReferences } from './references';
-import { computeMarginPercent, extractNetResult, extractRevenue } from './rubrics';
+import {
+  computeMarginPercent,
+  extractEmployeeCount,
+  extractNetResult,
+  extractRevenue,
+} from './rubrics';
 import type {
   FetchCompanyFinancialsOptions,
   NbbAnnualAccountSummary,
@@ -49,6 +54,7 @@ export async function fetchCompanyFinancials(
           revenue: null,
           netResult: null,
           marginPercent: null,
+          employeeCount: null,
           currency: 'EUR',
           depositDate: ref.depositDate,
           error: 'no_json',
@@ -62,6 +68,7 @@ export async function fetchCompanyFinancials(
 
       const revenue = extractRevenue(accountingData.Rubrics);
       const netResult = extractNetResult(accountingData.Rubrics);
+      const employeeCount = extractEmployeeCount(accountingData.Rubrics);
 
       summaries.push({
         fiscalYear: ref.fiscalYear,
@@ -69,6 +76,7 @@ export async function fetchCompanyFinancials(
         revenue,
         netResult,
         marginPercent: computeMarginPercent(revenue, netResult),
+        employeeCount,
         currency: 'EUR',
         depositDate: ref.depositDate,
       });
@@ -79,6 +87,7 @@ export async function fetchCompanyFinancials(
         revenue: null,
         netResult: null,
         marginPercent: null,
+        employeeCount: null,
         currency: 'EUR',
         depositDate: ref.depositDate,
         error: 'fetch_failed',

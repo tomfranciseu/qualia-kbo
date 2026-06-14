@@ -4,6 +4,7 @@ export type NbbAnnualAccountSummary = {
   revenue: number | null;
   netResult: number | null;
   marginPercent: number | null;
+  employeeCount: number | null;
   currency: 'EUR';
   depositDate?: string;
   error?: 'no_json' | 'fetch_failed';

@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { selectRecentDepositReferences } from '../src/nbb/references';
 import {
   computeMarginPercent,
+  extractEmployeeCount,
   extractNetResult,
   extractRevenue,
 } from '../src/nbb/rubrics';
@@ -28,6 +29,36 @@ describe('rubrics', () => {
     expect(extractRevenue(rubrics)).toBe(1_000_000);
     expect(extractNetResult(rubrics)).toBe(120_000);
     expect(computeMarginPercent(1_000_000, 120_000)).toBe(12);
+  });
+
+  it('prefers aggregate turnover rubric 70/76A over component 70', () => {
+    const rubrics = [
+      { Code: '70', Value: '1000000', Period: 'N' },
+      { Code: '70/76A', Value: '225353586.48', Period: 'N' },
+      { Code: '9904', Value: '-2628674.22', Period: 'N' },
+    ];
+    expect(extractRevenue(rubrics)).toBe(225_353_586.48);
+    expect(extractNetResult(rubrics)).toBe(-2_628_674.22);
+    expect(computeMarginPercent(225_353_586.48, -2_628_674.22)).toBe(-1.17);
+  });
+
+  it('sums turnover components when aggregate is absent', () => {
+    const rubrics = [
+      { Code: '70', Value: '1000000', Period: 'N' },
+      { Code: '72', Value: '200000', Period: 'N' },
+      { Code: '76A', Value: '50000', Period: 'N' },
+    ];
+    expect(extractRevenue(rubrics)).toBe(1_000_000);
+  });
+
+  it('extracts average headcount from rubric 1003', () => {
+    const rubrics = [
+      { Code: '1003', Value: '1141.9', Period: 'N' },
+      { Code: '9087', Value: '1141.9', Period: 'N' },
+      { Code: '9904', Value: '120000', Period: 'N' },
+    ];
+    expect(extractEmployeeCount(rubrics)).toBe(1141.9);
+    expect(extractNetResult(rubrics)).toBe(120_000);
   });
 
   it('returns null margin when revenue is zero', () => {
@@ -110,6 +141,7 @@ describe('fetchCompanyFinancials', () => {
     expect(y2024?.revenue).toBe(1_000_000);
     expect(y2024?.netResult).toBe(120_000);
     expect(y2024?.marginPercent).toBe(12);
+    expect(y2024?.employeeCount).toBeNull();
 
     const y2022 = result.years.find((y) => y.fiscalYear === 2022);
     expect(y2022?.error).toBe('no_json');
