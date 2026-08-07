@@ -50,54 +50,54 @@ export async function listEnterprisesByNaceCode(
 
   const prisma = createKboClient(options.databaseUrl);
 
-  const [hits, countRows] = await Promise.all([
-    prisma.$queryRaw<EnterpriseHitRow[]>`
-      WITH enterprise_hits AS (
-        SELECT DISTINCT a."enterpriseId" AS "enterpriseNumber"
-        FROM kbo."Activity" a
-        WHERE a."naceCode" = ${code}
-          AND a."enterpriseId" IS NOT NULL
-          AND (${naceVersion}::text IS NULL OR a."naceVersion" = ${naceVersion})
-          AND (${classification}::text IS NULL OR a."classification" = ${classification})
+  // Sequential queries avoid two large hash aggregates competing for /dev/shm.
+  const hits = await prisma.$queryRaw<EnterpriseHitRow[]>`
+    WITH enterprise_hits AS (
+      SELECT a."enterpriseId" AS "enterpriseNumber"
+      FROM kbo."Activity" a
+      WHERE a."naceCode" = ${code}
+        AND a."enterpriseId" IS NOT NULL
+        AND (${naceVersion}::text IS NULL OR a."naceVersion" = ${naceVersion})
+        AND (${classification}::text IS NULL OR a."classification" = ${classification})
 
-        UNION
+      UNION
 
-        SELECT DISTINCT est."enterpriseNumber"
-        FROM kbo."Activity" a
-        JOIN kbo."Establishment" est
-          ON est."establishmentNumber" = a."establishmentId"
-        WHERE a."naceCode" = ${code}
-          AND a."establishmentId" IS NOT NULL
-          AND (${naceVersion}::text IS NULL OR a."naceVersion" = ${naceVersion})
-          AND (${classification}::text IS NULL OR a."classification" = ${classification})
-      )
-      SELECT "enterpriseNumber" FROM enterprise_hits
-      ORDER BY "enterpriseNumber"
-      LIMIT ${limit} OFFSET ${offset}
-    `,
-    prisma.$queryRaw<Array<{ total: bigint }>>`
-      WITH enterprise_hits AS (
-        SELECT DISTINCT a."enterpriseId" AS "enterpriseNumber"
-        FROM kbo."Activity" a
-        WHERE a."naceCode" = ${code}
-          AND a."enterpriseId" IS NOT NULL
-          AND (${naceVersion}::text IS NULL OR a."naceVersion" = ${naceVersion})
-          AND (${classification}::text IS NULL OR a."classification" = ${classification})
+      SELECT est."enterpriseNumber"
+      FROM kbo."Activity" a
+      JOIN kbo."Establishment" est
+        ON est."establishmentNumber" = a."establishmentId"
+      WHERE a."naceCode" = ${code}
+        AND a."establishmentId" IS NOT NULL
+        AND (${naceVersion}::text IS NULL OR a."naceVersion" = ${naceVersion})
+        AND (${classification}::text IS NULL OR a."classification" = ${classification})
+    )
+    SELECT "enterpriseNumber" FROM enterprise_hits
+    ORDER BY "enterpriseNumber"
+    LIMIT ${limit} OFFSET ${offset}
+  `;
 
-        UNION
+  const countRows = await prisma.$queryRaw<Array<{ total: bigint }>>`
+    WITH enterprise_hits AS (
+      SELECT a."enterpriseId" AS "enterpriseNumber"
+      FROM kbo."Activity" a
+      WHERE a."naceCode" = ${code}
+        AND a."enterpriseId" IS NOT NULL
+        AND (${naceVersion}::text IS NULL OR a."naceVersion" = ${naceVersion})
+        AND (${classification}::text IS NULL OR a."classification" = ${classification})
 
-        SELECT DISTINCT est."enterpriseNumber"
-        FROM kbo."Activity" a
-        JOIN kbo."Establishment" est
-          ON est."establishmentNumber" = a."establishmentId"
-        WHERE a."naceCode" = ${code}
-          AND a."establishmentId" IS NOT NULL
-          AND (${naceVersion}::text IS NULL OR a."naceVersion" = ${naceVersion})
-          AND (${classification}::text IS NULL OR a."classification" = ${classification})
-      )
-      SELECT COUNT(*)::bigint AS total FROM enterprise_hits
-    `,
-  ]);
+      UNION
+
+      SELECT est."enterpriseNumber"
+      FROM kbo."Activity" a
+      JOIN kbo."Establishment" est
+        ON est."establishmentNumber" = a."establishmentId"
+      WHERE a."naceCode" = ${code}
+        AND a."establishmentId" IS NOT NULL
+        AND (${naceVersion}::text IS NULL OR a."naceVersion" = ${naceVersion})
+        AND (${classification}::text IS NULL OR a."classification" = ${classification})
+    )
+    SELECT COUNT(*)::bigint AS total FROM enterprise_hits
+  `;
 
   const total = Number(countRows[0]?.total ?? 0n);
   if (hits.length === 0) {
