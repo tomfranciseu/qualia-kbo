@@ -11,6 +11,10 @@ export async function loadDeleteAll(): Promise<void> {
 
   try {
     console.log('Starting deletion of previous data...');
+    console.log('Starting deleting of activity data...');
+    await prisma.$executeRawUnsafe(`TRUNCATE TABLE "kbo"."Activity" CASCADE;`).catch((error) => {
+      console.error('Error truncating activity data:', error);
+    });
     await prisma.$transaction(deleteOperations1).catch((error) => {
       console.error('Error deleting other data:', error);
     });

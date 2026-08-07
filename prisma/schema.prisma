@@ -28,6 +28,7 @@ model Enterprise {
   addresses              KBOAddress[]
   contacts               KBOContact[]
   branches               Branch[]
+  activities             Activity[]
 
   @@schema("kbo")
 }
@@ -40,7 +41,30 @@ model Establishment {
   Denomination        Denomination[]
   Address             KBOAddress[]
   KBOContact          KBOContact[]
+  activities          Activity[]
 
+  @@schema("kbo")
+}
+
+/// Economic activity (NACE-BEL) from KBO open-data activity.csv.
+model Activity {
+  id                String          @id @default(cuid())
+  entityNumber      String
+  activityGroupCode String
+  naceVersion       String
+  naceCode          String
+  classification    String
+  enterpriseId      String?
+  enterprise        Enterprise?     @relation(fields: [enterpriseId], references: [enterpriseNumber], map: "ActivityEnterprise")
+  establishmentId   String?
+  establishment     Establishment?  @relation(fields: [establishmentId], references: [establishmentNumber], map: "ActivityEstablishment")
+
+  @@unique([entityNumber, activityGroupCode, naceVersion, naceCode, classification], name: "activity_entity_group_version_code_class")
+  @@index([naceCode, naceVersion])
+  @@index([naceCode])
+  @@index([entityNumber])
+  @@index([enterpriseId])
+  @@index([establishmentId])
   @@schema("kbo")
 }
 

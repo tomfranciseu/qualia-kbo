@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.0
+
+- Load KBO open-data `activity.csv` into `Activity` (NACE-BEL codes)
+- `listEnterprisesByNaceCode` — paginated enterprise list by NACE code (enterprise + establishment activities)
+- Indexes on `(naceCode, naceVersion)` for list queries
+- Script: `npm run load:activity`
+
 ## 0.2.0
 
 - NBB CBSO Authentic Data Query client: `fetchCompanyFinancials`, `checkNbbConfigured`

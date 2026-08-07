@@ -1,6 +1,6 @@
 {
   "name": "@qualia/kbo",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "private": false,
   "type": "module",
   "description": "Belgian KBO registry — standalone DB, ETL, and lookup",
@@ -11,6 +11,7 @@
     "src/index.ts",
     "src/client.ts",
     "src/lookup.ts",
+    "src/activity.ts",
     "src/types.ts",
     "src/vat.ts",
     "src/nbb",
@@ -32,6 +33,7 @@
     "load:address": "tsx src/load/040_load_address.ts",
     "load:contacts": "tsx src/load/050_load_contacts.ts",
     "load:denomination": "tsx src/load/060_load_denomination.ts",
+    "load:activity": "tsx src/load/run-activity.ts",
     "postinstall": "prisma generate"
   },
   "dependencies": {

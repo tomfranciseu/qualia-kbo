@@ -28,16 +28,32 @@ npm run load:all
 |---|---|
 | `npm run migrate:deploy` | Apply Prisma migrations |
 | `npm run load:all` | Full ETL pipeline (add `--upsert` for upsert mode) |
+| `npm run load:activity` | Load `data/activity.csv` only (NACE-BEL activities) |
 | `npm run check:types` | TypeScript check |
 | `npm test` | Vitest unit tests |
 
 ## Consumption from monday2.0
 
 ```json
-"@qualia/kbo": "github:tomfranciseu/qualia-kbo#v0.1.0"
+"@qualia/kbo": "github:tomfranciseu/qualia-kbo#v0.3.0"
 ```
 
 Set `KBO_DATABASE_URL` on the app runtime for Belgian VAT autofill from local KBO data. Without it, the app falls back to VIES.
+
+### Search enterprises by NACE-BEL
+
+```typescript
+import { listEnterprisesByNaceCode } from '@qualia/kbo';
+
+const { enterprises, total } = await listEnterprisesByNaceCode('62010', {
+  naceVersion: '2025',
+  classification: 'MAIN',
+  limit: 50,
+  offset: 0,
+});
+```
+
+Requires `activity.csv` loaded (`npm run load:activity` or `load:all`).
 
 ### NBB annual accounts (financials)
 
