@@ -106,15 +106,6 @@ export async function listEnterprisesByNaceCode(
 
   const enterpriseNumbers = hits.map((h: EnterpriseHitRow) => h.enterpriseNumber);
 
-  const activitySelect = {
-    where: {
-      naceCode: code,
-      ...(naceVersion ? { naceVersion } : {}),
-      ...(classification ? { classification } : {}),
-    },
-    select: { naceCode: true, classification: true },
-  } as const;
-
   const enterprises = await prisma.enterprise.findMany({
     where: { enterpriseNumber: { in: enterpriseNumbers } },
     include: {
@@ -122,18 +113,12 @@ export async function listEnterprisesByNaceCode(
       addresses: { take: 1 },
       KBOstatus: true,
       juridicalForm: true,
-      activities: activitySelect,
-      establishments: {
-        select: {
-          activities: activitySelect,
-        },
-      },
     },
   });
 
-  type EnterpriseWithActivities = (typeof enterprises)[number];
-  const byNumber = new Map<string, EnterpriseWithActivities>(
-    enterprises.map((e: EnterpriseWithActivities) => [e.enterpriseNumber, e]),
+  type EnterpriseRow = (typeof enterprises)[number];
+  const byNumber = new Map<string, EnterpriseRow>(
+    enterprises.map((e: EnterpriseRow) => [e.enterpriseNumber, e]),
   );
 
   return {
@@ -150,15 +135,6 @@ export async function listEnterprisesByNaceCode(
         enterprise.denominations[0]?.denomination ??
         '';
       const address = enterprise.addresses[0];
-      const activityRows = [
-        ...enterprise.activities,
-        ...enterprise.establishments.flatMap(
-          (est: { activities: Array<{ naceCode: string; classification: string }> }) =>
-            est.activities,
-        ),
-      ];
-      const naceCodes = [...new Set(activityRows.map((a) => a.naceCode))];
-      const classifications = [...new Set(activityRows.map((a) => a.classification))];
 
       return [
         {
@@ -167,8 +143,8 @@ export async function listEnterprisesByNaceCode(
           city: address?.municipalityNL ?? address?.municipalityFR ?? undefined,
           status: enterprise.KBOstatus?.description,
           juridicalForm: enterprise.juridicalForm?.description,
-          naceCodes: naceCodes.length > 0 ? naceCodes : [code],
-          classifications,
+          naceCodes: [code],
+          classifications: classification ? [classification] : [],
         } satisfies KboNaceEnterpriseHit,
       ];
     }),

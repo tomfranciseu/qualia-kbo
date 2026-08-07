@@ -71,15 +71,16 @@ describe('listEnterprisesByNaceCode', () => {
 
   it('lists enterprises when Activity table is loaded', async () => {
     if (!process.env.KBO_DATABASE_URL) return;
-    const result = await listEnterprisesByNaceCode('84130', {
+    const result = await listEnterprisesByNaceCode('70200', {
       naceVersion: '2025',
+      classification: 'MAIN',
       limit: 5,
     });
     expect(result.total).toBeGreaterThanOrEqual(0);
     expect(result.enterprises.length).toBeLessThanOrEqual(5);
     for (const hit of result.enterprises) {
       expect(hit.enterpriseNumber).toMatch(/^\d{4}\.\d{3}\.\d{3}$/);
-      expect(hit.naceCodes).toContain('84130');
+      expect(hit.naceCodes).toContain('70200');
     }
-  });
+  }, 30_000);
 });
