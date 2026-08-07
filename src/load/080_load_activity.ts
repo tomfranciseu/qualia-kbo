@@ -14,7 +14,8 @@ type ActivityInput = {
   establishmentId?: string;
 };
 
-const BATCH_SIZE = 50_000;
+/** Keep batches small — activity.csv is ~1.5GB and large in-flight buffers OOMs Node. */
+const BATCH_SIZE = 10_000;
 
 async function insertBatch(batch: ActivityInput[], label: string, batchNumber: number): Promise<void> {
   const prisma = createKboClient();
@@ -75,29 +76,30 @@ export function rowToActivityInput(row: {
 
 export async function loadActivityCSV(filename: string, upsertMode: boolean): Promise<void> {
   const prisma = createKboClient();
-  let enterpriseBuffer: ActivityInput[] = [];
-  let establishmentBuffer: ActivityInput[] = [];
-  let unlinkedBuffer: ActivityInput[] = [];
-  let enterpriseBatchNumber = 0;
-  let establishmentBatchNumber = 0;
-  let unlinkedBatchNumber = 0;
-  let flushChain = Promise.resolve();
+  let buffer: ActivityInput[] = [];
+  let batchNumber = 0;
+  /** Single-flight insert gate — never pile up a long promise chain of retained batches. */
+  let gate = Promise.resolve();
 
-  const flushBuffer = (
-    parser: Papa.Parser,
-    getBuffer: () => ActivityInput[],
-    clearBuffer: () => void,
-    label: string,
-    incrementBatch: () => number,
-  ): void => {
-    const batch = getBuffer();
-    if (batch.length === 0) return;
-    clearBuffer();
-    const batchNumber = incrementBatch();
+  const flush = (parser: Papa.Parser): void => {
+    if (buffer.length === 0) return;
+    const batch = buffer;
+    buffer = [];
+    batchNumber += 1;
+    const current = batchNumber;
+    const label =
+      batch[0]?.enterpriseId != null
+        ? 'enterpriseId'
+        : batch[0]?.establishmentId != null
+          ? 'establishmentId'
+          : 'unlinked';
+
     parser.pause();
-    flushChain = flushChain
-      .then(() => insertBatch(batch, label, batchNumber))
-      .then(() => parser.resume())
+    gate = gate
+      .then(() => insertBatch(batch, label, current))
+      .then(() => {
+        parser.resume();
+      })
       .catch((error) => {
         parser.abort();
         throw error;
@@ -105,7 +107,7 @@ export async function loadActivityCSV(filename: string, upsertMode: boolean): Pr
   };
 
   await new Promise<void>((resolve, reject) => {
-    Papa.parse(fs.createReadStream(filename), {
+    Papa.parse(fs.createReadStream(filename, { highWaterMark: 1024 * 64 }), {
       header: true,
       step: (results, parser) => {
         const row = results.data as {
@@ -120,7 +122,8 @@ export async function loadActivityCSV(filename: string, upsertMode: boolean): Pr
 
         if (upsertMode) {
           const input = rowToActivityInput(row);
-          flushChain = flushChain
+          parser.pause();
+          gate = gate
             .then(() =>
               prisma.activity.upsert({
                 where: {
@@ -139,6 +142,7 @@ export async function loadActivityCSV(filename: string, upsertMode: boolean): Pr
                 create: input,
               }),
             )
+            .then(() => parser.resume())
             .catch((error) => {
               console.error('Error upserting activity:', error, row);
               parser.abort();
@@ -147,78 +151,24 @@ export async function loadActivityCSV(filename: string, upsertMode: boolean): Pr
           return;
         }
 
-        const input = rowToActivityInput(row);
-        if (input.enterpriseId) {
-          enterpriseBuffer.push(input);
-          if (enterpriseBuffer.length >= BATCH_SIZE) {
-            flushBuffer(
-              parser,
-              () => enterpriseBuffer,
-              () => {
-                enterpriseBuffer = [];
-              },
-              'enterpriseId',
-              () => {
-                enterpriseBatchNumber += 1;
-                return enterpriseBatchNumber;
-              },
-            );
-          }
-        } else if (input.establishmentId) {
-          establishmentBuffer.push(input);
-          if (establishmentBuffer.length >= BATCH_SIZE) {
-            flushBuffer(
-              parser,
-              () => establishmentBuffer,
-              () => {
-                establishmentBuffer = [];
-              },
-              'establishmentId',
-              () => {
-                establishmentBatchNumber += 1;
-                return establishmentBatchNumber;
-              },
-            );
-          }
-        } else {
-          unlinkedBuffer.push(input);
-          if (unlinkedBuffer.length >= BATCH_SIZE) {
-            flushBuffer(
-              parser,
-              () => unlinkedBuffer,
-              () => {
-                unlinkedBuffer = [];
-              },
-              'unlinked',
-              () => {
-                unlinkedBatchNumber += 1;
-                return unlinkedBatchNumber;
-              },
-            );
-          }
+        buffer.push(rowToActivityInput(row));
+        if (buffer.length >= BATCH_SIZE) {
+          flush(parser);
         }
       },
       complete: () => {
-        flushChain
+        gate
           .then(async () => {
-            if (!upsertMode) {
-              const tasks = [];
-              if (enterpriseBuffer.length > 0) {
-                enterpriseBatchNumber += 1;
-                tasks.push(insertBatch(enterpriseBuffer, 'enterpriseId', enterpriseBatchNumber));
-                enterpriseBuffer = [];
-              }
-              if (establishmentBuffer.length > 0) {
-                establishmentBatchNumber += 1;
-                tasks.push(insertBatch(establishmentBuffer, 'establishmentId', establishmentBatchNumber));
-                establishmentBuffer = [];
-              }
-              if (unlinkedBuffer.length > 0) {
-                unlinkedBatchNumber += 1;
-                tasks.push(insertBatch(unlinkedBuffer, 'unlinked', unlinkedBatchNumber));
-                unlinkedBuffer = [];
-              }
-              await Promise.all(tasks);
+            if (!upsertMode && buffer.length > 0) {
+              batchNumber += 1;
+              const label =
+                buffer[0]?.enterpriseId != null
+                  ? 'enterpriseId'
+                  : buffer[0]?.establishmentId != null
+                    ? 'establishmentId'
+                    : 'unlinked';
+              await insertBatch(buffer, label, batchNumber);
+              buffer = [];
             }
             console.log('Activity CSV file successfully processed');
             resolve();
