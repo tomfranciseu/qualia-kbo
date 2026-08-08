@@ -115,8 +115,8 @@ export async function loadDenominationCSV(filename: string, upsertMode: boolean)
         if (upsertMode) {
           const input = rowToInput(row);
           flushChain = flushChain
-            .then(() =>
-              prisma.denomination.upsert({
+            .then(async () => {
+              await prisma.denomination.upsert({
                 where: {
                   entityNumber_language_typeOfDenomination: {
                     entityNumber: row.EntityNumber,
@@ -130,8 +130,8 @@ export async function loadDenominationCSV(filename: string, upsertMode: boolean)
                   establishmentId: input.establishmentId ?? null,
                 },
                 create: input,
-              }),
-            )
+              });
+            })
             .catch((error) => {
               console.error('Error upserting data:', error, row);
               parser.abort();

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.1
+
+- Fix CI typecheck: use `moduleResolution: bundler` so extensionless imports stay Next.js-compatible
+
 ## 0.3.0
 
 - Load KBO open-data `activity.csv` into `Activity` (NACE-BEL codes)
