@@ -1,5 +1,6 @@
-import * as fs from 'fs';
-import * as Papa from 'papaparse';
+import fs from 'fs';
+import Papa from 'papaparse';
+import { determineEntityType } from './helper';
 import { createKboClient } from '../client';
 
 type KBOContactInput = {
@@ -10,6 +11,17 @@ type KBOContactInput = {
   enterpriseId?: string;
   establishmentId?: string;
 };
+
+async function ensureContactTypes(codes: Iterable<string>): Promise<void> {
+  const prisma = createKboClient();
+  for (const code of codes) {
+    await prisma.contactType.upsert({
+      where: { code },
+      update: {},
+      create: { code, description: code },
+    });
+  }
+}
 
 export async function loadContactsCSV(filename: string, upsertMode: boolean): Promise<void> {
   const prisma = createKboClient();
@@ -50,24 +62,27 @@ export async function loadContactsCSV(filename: string, upsertMode: boolean): Pr
               console.error('Error upserting data:', error, row);
               reject(error);
             });
-        } else if (row.EntityContact === 'ENT') {
-          contacts.push({
-            entityNumber: row.EntityNumber,
-            entityContactCode: row.EntityContact,
-            conctactTypeCode: row.ContactType,
-            value: row.Value,
-            enterpriseId: row.EntityNumber,
-          });
-        } else if (row.EntityContact === 'EST') {
-          estContacts.push({
-            entityNumber: row.EntityNumber,
-            entityContactCode: row.EntityContact,
-            conctactTypeCode: row.ContactType,
-            value: row.Value,
-            establishmentId: row.EntityNumber,
-          });
         } else {
-          console.error('Unknown entity type', row);
+          const entityType = determineEntityType(row.EntityNumber);
+          if (entityType === 'Enterprise') {
+            contacts.push({
+              entityNumber: row.EntityNumber,
+              entityContactCode: row.EntityContact,
+              conctactTypeCode: row.ContactType,
+              value: row.Value,
+              enterpriseId: row.EntityNumber,
+            });
+          } else if (entityType === 'Establishment') {
+            estContacts.push({
+              entityNumber: row.EntityNumber,
+              entityContactCode: row.EntityContact,
+              conctactTypeCode: row.ContactType,
+              value: row.Value,
+              establishmentId: row.EntityNumber,
+            });
+          } else {
+            console.error('Unknown entity type', row);
+          }
         }
       },
       complete: async () => {
@@ -94,6 +109,7 @@ async function processBatch(
   const batchSize = 100000;
   for (let i = 0; i < contacts.length; i += batchSize) {
     const batch = contacts.slice(i, i + batchSize);
+    await ensureContactTypes(new Set(batch.map((contact) => contact.conctactTypeCode)));
     await prisma.kBOContact.createMany({
       data: batch,
       skipDuplicates: true,

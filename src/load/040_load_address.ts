@@ -111,11 +111,20 @@ export async function loadAddressCSV(filename: string, upsertMode: boolean): Pro
         }
       },
       complete: () => {
-        if (!upsertMode && enterprises.length > 0 && establishments.length > 0) {
-          Promise.all([
-            processBatches(enterprises, 'enterpriseId'),
-            processBatches(establishments, 'establishmentId'),
-          ])
+        if (!upsertMode) {
+          const tasks = [];
+          if (enterprises.length > 0) {
+            tasks.push(processBatches(enterprises, 'enterpriseId'));
+          }
+          if (establishments.length > 0) {
+            tasks.push(processBatches(establishments, 'establishmentId'));
+          }
+          if (tasks.length === 0) {
+            console.log('No addresses to load.');
+            resolve();
+            return;
+          }
+          Promise.all(tasks)
             .then(() => {
               console.log('addresses CSV file successfully processed');
               resolve();

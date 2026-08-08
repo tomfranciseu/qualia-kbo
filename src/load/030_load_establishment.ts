@@ -1,5 +1,5 @@
 import * as fs from 'fs';
-import * as Papa from 'papaparse';
+import Papa from 'papaparse';
 import { parseDate } from './helper';
 import { createKboClient } from '../client';
 import type { Establishment } from '../generated/prisma/client';

@@ -1,5 +1,5 @@
 import * as fs from 'fs';
-import * as Papa from 'papaparse';
+import Papa from 'papaparse';
 import { createKboClient } from '../client';
 
 type CodeRow = { Category: string; Code: string; Language: string; Description: string };
