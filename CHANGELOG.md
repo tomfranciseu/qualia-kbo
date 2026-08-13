@@ -1,11 +1,18 @@
 # Changelog
 
+## 0.3.1
+
+- Fix CI typecheck: use `moduleResolution: bundler` so extensionless imports stay Next.js-compatible
+
 ## 0.3.0
 
 - Load KBO open-data `activity.csv` into `Activity` (NACE-BEL codes)
 - `listEnterprisesByNaceCode` — paginated enterprise list by NACE code (enterprise + establishment activities)
 - Indexes on `(naceCode, naceVersion)` for list queries
 - Script: `npm run load:activity`
+- Branch CSV loader (`070_load_branch`) wired into `load:all`; treat `9.*` entity numbers as Branch
+- Hardened contact/denomination/address loaders (streaming batches, entity-type detection, FK fallbacks)
+- Helper script: `npm run load:missing`
 
 ## 0.2.0
 
