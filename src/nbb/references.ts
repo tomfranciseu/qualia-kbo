@@ -53,7 +53,8 @@ function extractReferenceRecords(payload: unknown): ReferenceRecord[] {
 
 export async function fetchDepositReferences(
   enterpriseNumber: string,
-  fetchImpl: typeof fetch = fetch
+  fetchImpl: typeof fetch = fetch,
+  options?: import('./client').NbbRequestOptions
 ): Promise<NbbDepositReference[]> {
   const normalized = normalizeEnterpriseNumber(enterpriseNumber);
   if (normalized.length !== 10) {
@@ -62,7 +63,8 @@ export async function fetchDepositReferences(
 
   const payload = await nbbGet<unknown>(
     `/legalEntity/${normalized}/references`,
-    fetchImpl
+    fetchImpl,
+    options
   );
 
   return extractReferenceRecords(payload)

@@ -1,8 +1,10 @@
 export { createKboClient, disconnectKboClient, checkKboDatabaseHealth } from './client';
 export { lookupByEnterpriseNumber, lookupByName, lookupByVatNumber } from './lookup';
-export { listEnterprisesByNaceCode } from './activity';
+export { countEnterprisesByNacePostalCode, listEnterprisesByNaceAndPostalCode, listEnterprisesByNaceCode } from './activity';
 export type {
+  EnterprisesByPostalCodeRow,
   KboNaceEnterpriseHit,
+  NacePostalEnterprise,
   ListEnterprisesByNaceOptions,
   ListEnterprisesByNaceResult,
 } from './activity';

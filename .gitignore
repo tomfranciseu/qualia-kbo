@@ -2,4 +2,8 @@ node_modules/
 .env
 data/*.csv
 data/*.zip
+data/*.duckdb
+reports/*.csv
+reports/.cache/
+*.duckdb.wal
 src/generated/

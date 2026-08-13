@@ -1,166 +1,115 @@
 import { createKboClient } from './client';
-import { Prisma } from './generated/prisma/client';
 
-export type ListEnterprisesByNaceOptions = {
-  /** NACE nomenclature version, e.g. "2008" or "2025". Omit to match any version. */
-  naceVersion?: string;
-  /** e.g. "MAIN" for primary activity only. */
-  classification?: string;
-  limit?: number;
-  offset?: number;
-  databaseUrl?: string;
-};
+export type ListEnterprisesByNaceOptions = { naceVersion?: string; classification?: string; limit?: number; offset?: number; /** @deprecated Pass KBO_DATABASE_PATH instead. */ databaseUrl?: string; databasePath?: string };
+export type KboNaceEnterpriseHit = { enterpriseNumber: string; name: string; city?: string; status?: string; juridicalForm?: string; naceCodes: string[]; classifications: string[] };
+export type ListEnterprisesByNaceResult = { enterprises: KboNaceEnterpriseHit[]; total: number };
+export type NaceActivityFilter = { naceCode: string; naceVersion?: string; classification?: string };
+export type EnterprisesByPostalCodeRow = { postalCode: string; enterpriseCount: number };
+export type NacePostalEnterprise = { enterpriseNumber: string; name: string; postalCode: string };
 
-export type KboNaceEnterpriseHit = {
-  enterpriseNumber: string;
-  name: string;
-  city?: string;
-  status?: string;
-  juridicalForm?: string;
-  naceCodes: string[];
-  classifications: string[];
-};
-
-export type ListEnterprisesByNaceResult = {
-  enterprises: KboNaceEnterpriseHit[];
-  total: number;
-};
-
-type EnterpriseHitRow = {
-  enterpriseNumber: string;
-};
-
-/**
- * List distinct enterprises that have (or whose establishments have) the given NACE-BEL code.
- * Entity numbers in KBO are dotted (`XXXX.XXX.XXX` / `X.XXX.XXX.XXX`); no digit stripping needed.
- */
-export async function listEnterprisesByNaceCode(
-  naceCode: string,
-  options: ListEnterprisesByNaceOptions = {},
-): Promise<ListEnterprisesByNaceResult> {
+export async function listEnterprisesByNaceCode(naceCode: string, options: ListEnterprisesByNaceOptions = {}): Promise<ListEnterprisesByNaceResult> {
   const code = naceCode.trim();
-  if (!code) {
-    return { enterprises: [], total: 0 };
-  }
-
+  if (!code) return { enterprises: [], total: 0 };
   const limit = Math.min(Math.max(options.limit ?? 50, 1), 500);
   const offset = Math.max(options.offset ?? 0, 0);
-  const naceVersion = options.naceVersion?.trim() || null;
+  const version = options.naceVersion?.trim() || null;
   const classification = options.classification?.trim() || null;
-
-  const prisma = createKboClient(options.databaseUrl);
-
-  // Sequential queries avoid two large hash aggregates competing for /dev/shm.
-  const hits = await prisma.$queryRaw<EnterpriseHitRow[]>`
-    WITH enterprise_hits AS (
-      SELECT a."enterpriseId" AS "enterpriseNumber"
-      FROM kbo."Activity" a
-      WHERE a."naceCode" = ${code}
-        AND a."enterpriseId" IS NOT NULL
-        AND (${naceVersion}::text IS NULL OR a."naceVersion" = ${naceVersion})
-        AND (${classification}::text IS NULL OR a."classification" = ${classification})
-
-      UNION
-
-      SELECT est."enterpriseNumber"
-      FROM kbo."Activity" a
-      JOIN kbo."Establishment" est
-        ON est."establishmentNumber" = a."establishmentId"
-      WHERE a."naceCode" = ${code}
-        AND a."establishmentId" IS NOT NULL
-        AND (${naceVersion}::text IS NULL OR a."naceVersion" = ${naceVersion})
-        AND (${classification}::text IS NULL OR a."classification" = ${classification})
-    )
-    SELECT "enterpriseNumber" FROM enterprise_hits
-    ORDER BY "enterpriseNumber"
-    LIMIT ${limit} OFFSET ${offset}
-  `;
-
-  const countRows = await prisma.$queryRaw<Array<{ total: bigint }>>`
-    WITH enterprise_hits AS (
-      SELECT a."enterpriseId" AS "enterpriseNumber"
-      FROM kbo."Activity" a
-      WHERE a."naceCode" = ${code}
-        AND a."enterpriseId" IS NOT NULL
-        AND (${naceVersion}::text IS NULL OR a."naceVersion" = ${naceVersion})
-        AND (${classification}::text IS NULL OR a."classification" = ${classification})
-
-      UNION
-
-      SELECT est."enterpriseNumber"
-      FROM kbo."Activity" a
-      JOIN kbo."Establishment" est
-        ON est."establishmentNumber" = a."establishmentId"
-      WHERE a."naceCode" = ${code}
-        AND a."establishmentId" IS NOT NULL
-        AND (${naceVersion}::text IS NULL OR a."naceVersion" = ${naceVersion})
-        AND (${classification}::text IS NULL OR a."classification" = ${classification})
-    )
-    SELECT COUNT(*)::bigint AS total FROM enterprise_hits
-  `;
-
-  const total = Number(countRows[0]?.total ?? 0n);
-  if (hits.length === 0) {
-    return { enterprises: [], total };
-  }
-
-  const enterpriseNumbers = hits.map((h: EnterpriseHitRow) => h.enterpriseNumber);
-
-  const enterprises = await prisma.enterprise.findMany({
-    where: { enterpriseNumber: { in: enterpriseNumbers } },
-    include: {
-      denominations: true,
-      addresses: { take: 1 },
-      KBOstatus: true,
-      juridicalForm: true,
-    },
-  });
-
-  type EnterpriseRow = (typeof enterprises)[number];
-  const byNumber = new Map<string, EnterpriseRow>(
-    enterprises.map((e: EnterpriseRow) => [e.enterpriseNumber, e]),
-  );
-
-  return {
-    total,
-    enterprises: enterpriseNumbers.flatMap((enterpriseNumber: string) => {
-      const enterprise = byNumber.get(enterpriseNumber);
-      if (!enterprise) return [];
-
-      const nlDenomination = enterprise.denominations.find(
-        (d: { languageCode: string; denomination: string }) => d.languageCode === 'NL',
-      );
-      const name =
-        nlDenomination?.denomination ??
-        enterprise.denominations[0]?.denomination ??
-        '';
-      const address = enterprise.addresses[0];
-
-      return [
-        {
-          enterpriseNumber: enterprise.enterpriseNumber,
-          name,
-          city: address?.municipalityNL ?? address?.municipalityFR ?? undefined,
-          status: enterprise.KBOstatus?.description,
-          juridicalForm: enterprise.juridicalForm?.description,
-          naceCodes: [code],
-          classifications: classification ? [classification] : [],
-        } satisfies KboNaceEnterpriseHit,
-      ];
-    }),
-  };
+  const db = await createKboClient(options.databasePath ?? options.databaseUrl);
+  const params = [code, version, classification];
+  const source = `SELECT a."enterpriseId" AS "enterpriseNumber" FROM "Activity" a WHERE a."naceCode" = $1 AND a."enterpriseId" IS NOT NULL AND ($2 IS NULL OR a."naceVersion" = $2) AND ($3 IS NULL OR a."classification" = $3) UNION SELECT est."enterpriseNumber" FROM "Activity" a JOIN "Establishment" est ON est."establishmentNumber" = a."establishmentId" WHERE a."naceCode" = $1 AND a."establishmentId" IS NOT NULL AND ($2 IS NULL OR a."naceVersion" = $2) AND ($3 IS NULL OR a."classification" = $3)`;
+  const [{ total }] = await db.all<{ total: number }>(`WITH hits AS (${source}) SELECT count(*) AS total FROM hits`, params);
+  const hits = await db.all<{ enterpriseNumber: string }>(`WITH hits AS (${source}) SELECT "enterpriseNumber" FROM hits ORDER BY "enterpriseNumber" LIMIT $4 OFFSET $5`, [...params, limit, offset]);
+  if (hits.length === 0) return { enterprises: [], total: Number(total) };
+  const enterprises = await Promise.all(hits.map(async ({ enterpriseNumber }) => {
+    const [row] = await db.all<{ name: string | null; city: string | null; status: string | null; juridicalForm: string | null }>(`SELECT d."denomination" AS name, coalesce(address."municipalityNL", address."municipalityFR") AS city, status."description" AS status, form."description" AS "juridicalForm" FROM "Enterprise" e LEFT JOIN "Denomination" d ON d."enterpriseId" = e."enterpriseNumber" AND d."languageCode" = 'NL' LEFT JOIN "KBOAddress" address ON address."enterpriseId" = e."enterpriseNumber" LEFT JOIN "Code" status ON status."category" = 'Status' AND status."code" = e."KBOstatusCode" LEFT JOIN "Code" form ON form."category" = 'JuridicalForm' AND form."code" = e."juridicalFormCode" WHERE e."enterpriseNumber" = $1 LIMIT 1`, [enterpriseNumber]);
+    return row ? { enterpriseNumber, name: row.name ?? '', city: row.city ?? undefined, status: row.status ?? undefined, juridicalForm: row.juridicalForm ?? undefined, naceCodes: [code], classifications: classification ? [classification] : [] } : null;
+  }));
+  return { total: Number(total), enterprises: enterprises.filter((row) => row !== null).map((row) => ({
+    enterpriseNumber: row.enterpriseNumber,
+    name: row.name,
+    ...(row.city ? { city: row.city } : {}),
+    ...(row.status ? { status: row.status } : {}),
+    ...(row.juridicalForm ? { juridicalForm: row.juridicalForm } : {}),
+    naceCodes: row.naceCodes,
+    classifications: row.classifications,
+  })) };
 }
 
-/** Exported for tests — builds Activity where clause filters. */
-export function buildNaceActivityWhere(
-  naceCode: string,
-  options: Pick<ListEnterprisesByNaceOptions, 'naceVersion' | 'classification'> = {},
-): Prisma.ActivityWhereInput {
-  return {
-    naceCode: naceCode.trim(),
-    ...(options.naceVersion?.trim() ? { naceVersion: options.naceVersion.trim() } : {}),
-    ...(options.classification?.trim()
-      ? { classification: options.classification.trim() }
-      : {}),
-  };
+export function buildNaceActivityWhere(naceCode: string, options: Pick<ListEnterprisesByNaceOptions, 'naceVersion' | 'classification'> = {}): NaceActivityFilter {
+  return { naceCode: naceCode.trim(), ...(options.naceVersion?.trim() ? { naceVersion: options.naceVersion.trim() } : {}), ...(options.classification?.trim() ? { classification: options.classification.trim() } : {}) };
+}
+
+/** Counts distinct enterprises with a matching enterprise or establishment activity by registered-office postal code. */
+export async function countEnterprisesByNacePostalCode(naceCode: string, options: Pick<ListEnterprisesByNaceOptions, 'naceVersion' | 'classification' | 'databasePath' | 'databaseUrl'> = {}): Promise<EnterprisesByPostalCodeRow[]> {
+  const code = naceCode.trim();
+  if (!code) return [];
+  const version = options.naceVersion?.trim() || null;
+  const classification = options.classification?.trim() || null;
+  const db = await createKboClient(options.databasePath ?? options.databaseUrl);
+  const rows = await db.all<{ postalCode: string | null; enterpriseCount: number }>(`
+    WITH hits AS (
+      SELECT a."enterpriseId" AS "enterpriseNumber"
+      FROM "Activity" a
+      WHERE a."naceCode" = $1
+        AND a."enterpriseId" IS NOT NULL
+        AND ($2 IS NULL OR a."naceVersion" = $2)
+        AND ($3 IS NULL OR a."classification" = $3)
+      UNION
+      SELECT est."enterpriseNumber"
+      FROM "Activity" a
+      JOIN "Establishment" est ON est."establishmentNumber" = a."establishmentId"
+      WHERE a."naceCode" = $1
+        AND a."establishmentId" IS NOT NULL
+        AND ($2 IS NULL OR a."naceVersion" = $2)
+        AND ($3 IS NULL OR a."classification" = $3)
+    )
+    SELECT coalesce(nullif(address."zipcode", ''), 'Unknown') AS "postalCode", count(*) AS "enterpriseCount"
+    FROM hits
+    LEFT JOIN "KBOAddress" address
+      ON address."enterpriseId" = hits."enterpriseNumber"
+      AND address."typeOfAddressCode" = 'REGO'
+    GROUP BY 1
+    ORDER BY 1
+  `, [code, version, classification]);
+
+  return rows.map((row) => ({ postalCode: row.postalCode ?? 'Unknown', enterpriseCount: Number(row.enterpriseCount) }));
+}
+
+/** Lists each enterprise once when its own or an establishment's activity matches the NACE code and its registered office is in the postal code. */
+export async function listEnterprisesByNaceAndPostalCode(naceCode: string, postalCode: string, options: Pick<ListEnterprisesByNaceOptions, 'naceVersion' | 'classification' | 'databasePath' | 'databaseUrl'> = {}): Promise<NacePostalEnterprise[]> {
+  const code = naceCode.trim();
+  const postcode = postalCode.trim();
+  if (!code || !postcode) return [];
+  const version = options.naceVersion?.trim() || null;
+  const classification = options.classification?.trim() || null;
+  const db = await createKboClient(options.databasePath ?? options.databaseUrl);
+  return db.all<NacePostalEnterprise>(`
+    WITH hits AS (
+      SELECT a."enterpriseId" AS "enterpriseNumber"
+      FROM "Activity" a
+      WHERE a."naceCode" = $1 AND a."enterpriseId" IS NOT NULL
+        AND ($3 IS NULL OR a."naceVersion" = $3)
+        AND ($4 IS NULL OR a."classification" = $4)
+      UNION
+      SELECT est."enterpriseNumber"
+      FROM "Activity" a
+      JOIN "Establishment" est ON est."establishmentNumber" = a."establishmentId"
+      WHERE a."naceCode" = $1 AND a."establishmentId" IS NOT NULL
+        AND ($3 IS NULL OR a."naceVersion" = $3)
+        AND ($4 IS NULL OR a."classification" = $4)
+    )
+    SELECT hits."enterpriseNumber", coalesce((
+      SELECT d."denomination"
+      FROM "Denomination" d
+      WHERE d."enterpriseId" = hits."enterpriseNumber" AND d."languageCode" = 'NL'
+      ORDER BY d."typeOfDenominationCode"
+      LIMIT 1
+    ), '') AS "name", $2 AS "postalCode"
+    FROM hits
+    JOIN "KBOAddress" address
+      ON address."enterpriseId" = hits."enterpriseNumber"
+      AND address."typeOfAddressCode" = 'REGO'
+      AND address."zipcode" = $2
+    ORDER BY hits."enterpriseNumber"
+  `, [code, postcode, version, classification]);
 }

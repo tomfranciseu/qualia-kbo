@@ -1,5 +1,6 @@
 import { fetchAccountingData } from './accountingData';
 import { getNbbClientConfig } from './client';
+import { NbbApiError } from './client';
 import { fetchDepositReferences, selectRecentDepositReferences } from './references';
 import {
   computeMarginPercent,
@@ -33,8 +34,12 @@ export async function fetchCompanyFinancials(
     throw new Error('NBB CBSO not configured');
   }
 
-  const references = await fetchDepositReferences(normalized, fetchImpl);
-  const selected = selectRecentDepositReferences(references, years);
+  const requestOptions = { retries: options.retries, timeoutMs: options.timeoutMs };
+  const references = await fetchDepositReferences(normalized, fetchImpl, requestOptions);
+  const requestedFiscalYears = options.fiscalYears ?? (options.fiscalYear === undefined ? undefined : [options.fiscalYear]);
+  const selected = requestedFiscalYears === undefined
+    ? selectRecentDepositReferences(references, years)
+    : selectRecentDepositReferences(references.filter((reference) => requestedFiscalYears.includes(reference.fiscalYear)), requestedFiscalYears.length);
 
   const summaries: NbbAnnualAccountSummary[] = [];
   let enterpriseName: string | undefined;
@@ -45,7 +50,7 @@ export async function fetchCompanyFinancials(
     }
 
     try {
-      const accountingData = await fetchAccountingData(ref.referenceNumber, fetchImpl);
+      const accountingData = await fetchAccountingData(ref.referenceNumber, fetchImpl, requestOptions);
 
       if (!accountingData?.Rubrics?.length) {
         summaries.push({
@@ -80,7 +85,7 @@ export async function fetchCompanyFinancials(
         currency: 'EUR',
         depositDate: ref.depositDate,
       });
-    } catch {
+    } catch (error) {
       summaries.push({
         fiscalYear: ref.fiscalYear,
         referenceNumber: ref.referenceNumber,
@@ -90,7 +95,7 @@ export async function fetchCompanyFinancials(
         employeeCount: null,
         currency: 'EUR',
         depositDate: ref.depositDate,
-        error: 'fetch_failed',
+        error: error instanceof NbbApiError && error.status === 415 ? 'unsupported_format' : 'fetch_failed',
       });
     }
   }

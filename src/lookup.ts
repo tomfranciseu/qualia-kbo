@@ -2,119 +2,47 @@ import { createKboClient } from './client';
 import type { KboAddress, KboContact, KboLookupResult } from './types';
 import { formatEnterpriseNumber, getBelgianEnterpriseNumberFromVat } from './vat';
 
-const enterpriseInclude = {
-  denominations: true,
-  addresses: true,
-  contacts: { include: { contactType: true } },
-  juridicalForm: true,
-  KBOstatus: true,
-} as const;
+type EnterpriseRow = { enterpriseNumber: string; status: string | null; juridicalForm: string | null };
+type AddressRow = { streetNL: string | null; streetFR: string | null; houseNumber: string | null; zipcode: string | null; municipalityNL: string | null; municipalityFR: string | null; countryNL: string | null; countryFR: string | null };
 
-type EnterpriseRecord = Awaited<
-  ReturnType<ReturnType<typeof createKboClient>['enterprise']['findUnique']>
-> & {
-  denominations: Array<{ languageCode: string; denomination: string }>;
-  addresses: Array<{
-    streetNL: string | null;
-    streetFR: string | null;
-    houseNumber: string | null;
-    zipcode: string | null;
-    municipalityNL: string | null;
-    municipalityFR: string | null;
-    countryNL: string | null;
-    countryFR: string | null;
-  }>;
-  contacts: Array<{ value: string; contactType: { description: string } }>;
-  juridicalForm: { description: string } | null;
-  KBOstatus: { description: string } | null;
-};
-
-function mapAddress(address: EnterpriseRecord['addresses'][number]): KboAddress {
-  return {
-    street: address.streetNL ?? address.streetFR ?? '',
-    houseNumber: address.houseNumber ?? '',
-    postalZone: address.zipcode ?? '',
-    city: address.municipalityNL ?? address.municipalityFR ?? '',
-    country: address.countryNL ?? address.countryFR ?? 'BE',
-  };
+function mapAddress(address: AddressRow): KboAddress {
+  return { street: address.streetNL ?? address.streetFR ?? '', houseNumber: address.houseNumber ?? '', postalZone: address.zipcode ?? '', city: address.municipalityNL ?? address.municipalityFR ?? '', country: address.countryNL ?? address.countryFR ?? 'BE' };
 }
 
-function mapEnterpriseToResult(enterprise: EnterpriseRecord): KboLookupResult {
-  const nlDenomination = enterprise.denominations.find((d) => d.languageCode === 'NL');
-  const name =
-    nlDenomination?.denomination ??
-    enterprise.denominations[0]?.denomination ??
-    '';
-
-  const contacts: KboContact[] = enterprise.contacts.map((c) => ({
-    type: c.contactType.description,
-    value: c.value,
-  }));
-
-  return {
-    enterpriseNumber: enterprise.enterpriseNumber,
-    name,
-    addresses: enterprise.addresses.map(mapAddress),
-    contacts,
-    juridicalForm: enterprise.juridicalForm?.description,
-    status: enterprise.KBOstatus?.description,
-  };
-}
-
-export async function lookupByEnterpriseNumber(
-  enterpriseNumber: string,
-  databaseUrl?: string
-): Promise<KboLookupResult | null> {
-  const prisma = createKboClient(databaseUrl);
-  const normalized = formatEnterpriseNumber(enterpriseNumber.replaceAll(/\s/g, ''));
-
-  const enterprise = await prisma.enterprise.findUnique({
-    where: { enterpriseNumber: normalized },
-    include: enterpriseInclude,
-  });
-
+async function findEnterprise(where: string, values: unknown[]): Promise<KboLookupResult | null> {
+  const db = await createKboClient();
+  const [enterprise] = await db.all<EnterpriseRow>(`SELECT e."enterpriseNumber", status."description" AS status, form."description" AS "juridicalForm" FROM "Enterprise" e LEFT JOIN "Code" status ON status."category" = 'Status' AND status."code" = e."KBOstatusCode" LEFT JOIN "Code" form ON form."category" = 'JuridicalForm' AND form."code" = e."juridicalFormCode" WHERE ${where} LIMIT 1`, values);
   if (!enterprise) return null;
-  return mapEnterpriseToResult(enterprise as EnterpriseRecord);
+  const [denominations, addresses, contacts] = await Promise.all([
+    db.all<{ languageCode: string; denomination: string }>('SELECT "languageCode", "denomination" FROM "Denomination" WHERE "enterpriseId" = $1', [enterprise.enterpriseNumber]),
+    db.all<AddressRow>('SELECT "streetNL", "streetFR", "houseNumber", "zipcode", "municipalityNL", "municipalityFR", "countryNL", "countryFR" FROM "KBOAddress" WHERE "enterpriseId" = $1', [enterprise.enterpriseNumber]),
+    db.all<{ value: string; type: string }>(`SELECT c."value", t."description" AS type FROM "KBOContact" c LEFT JOIN "Code" t ON t."category" = 'ContactType' AND t."code" = c."conctactTypeCode" WHERE c."enterpriseId" = $1`, [enterprise.enterpriseNumber]),
+  ]);
+  const nl = denominations.find((d) => d.languageCode === 'NL');
+  const mappedContacts: KboContact[] = contacts.map((contact) => ({ type: contact.type ?? '', value: contact.value }));
+  return { enterpriseNumber: enterprise.enterpriseNumber, name: nl?.denomination ?? denominations[0]?.denomination ?? '', addresses: addresses.map(mapAddress), contacts: mappedContacts, juridicalForm: enterprise.juridicalForm ?? undefined, status: enterprise.status ?? undefined };
 }
 
-export async function lookupByName(
-  name: string,
-  databaseUrl?: string
-): Promise<KboLookupResult | null> {
-  const prisma = createKboClient(databaseUrl);
+export async function lookupByEnterpriseNumber(enterpriseNumber: string, databasePath?: string): Promise<KboLookupResult | null> {
+  const normalized = formatEnterpriseNumber(enterpriseNumber.replaceAll(/\s/g, ''));
+  if (databasePath) await createKboClient(databasePath);
+  return findEnterprise('e."enterpriseNumber" = $1', [normalized]);
+}
+
+export async function lookupByName(name: string, databasePath?: string): Promise<KboLookupResult | null> {
   const search = name.trim();
   if (!search) return null;
-
-  const findByMatch = async (mode: 'equals' | 'contains') => {
-    const rows = await prisma.enterprise.findMany({
-      where: {
-        denominations: {
-          some: {
-            denomination: { [mode]: search, mode: 'insensitive' },
-          },
-        },
-      },
-      include: enterpriseInclude,
-      take: 1,
-    });
-    return rows[0] ?? null;
-  };
-
-  const exact = await findByMatch('equals');
-  const enterprise = exact ?? (await findByMatch('contains'));
-  if (!enterprise) return null;
-  return mapEnterpriseToResult(enterprise as EnterpriseRecord);
+  if (databasePath) await createKboClient(databasePath);
+  const db = await createKboClient();
+  const escapeLike = search.replaceAll(/[%_\\]/g, '\\$&');
+  const [exact] = await db.all<{ enterpriseNumber: string }>('SELECT "enterpriseId" AS "enterpriseNumber" FROM "Denomination" WHERE lower("denomination") = lower($1) AND "enterpriseId" IS NOT NULL LIMIT 1', [search]);
+  const [partial] = exact ? [] : await db.all<{ enterpriseNumber: string }>(`SELECT "enterpriseId" AS "enterpriseNumber" FROM "Denomination" WHERE lower("denomination") LIKE '%' || lower($1) || '%' ESCAPE '\\' AND "enterpriseId" IS NOT NULL LIMIT 1`, [escapeLike]);
+  const number = exact?.enterpriseNumber ?? partial?.enterpriseNumber;
+  return number ? findEnterprise('e."enterpriseNumber" = $1', [number]) : null;
 }
 
-export async function lookupByVatNumber(
-  countryCode: string,
-  vatNumber: string,
-  databaseUrl?: string
-): Promise<KboLookupResult | null> {
+export async function lookupByVatNumber(countryCode: string, vatNumber: string, databasePath?: string): Promise<KboLookupResult | null> {
   if (countryCode.toUpperCase() !== 'BE') return null;
-
   const digits = getBelgianEnterpriseNumberFromVat(vatNumber);
-  if (!digits) return null;
-
-  return lookupByEnterpriseNumber(formatEnterpriseNumber(digits), databaseUrl);
+  return digits ? lookupByEnterpriseNumber(formatEnterpriseNumber(digits), databasePath) : null;
 }

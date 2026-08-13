@@ -3,12 +3,14 @@ import type { NbbAccountingData } from './types';
 
 export async function fetchAccountingData(
   referenceNumber: string,
-  fetchImpl: typeof fetch = fetch
+  fetchImpl: typeof fetch = fetch,
+  options?: import('./client').NbbRequestOptions
 ): Promise<NbbAccountingData | null> {
   try {
     return await nbbGet<NbbAccountingData>(
       `/deposit/${encodeURIComponent(referenceNumber)}/accountingData`,
-      fetchImpl
+      fetchImpl,
+      options
     );
   } catch (error) {
     if (error instanceof NbbApiError && error.status === 404) {

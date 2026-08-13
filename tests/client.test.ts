@@ -2,17 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { checkKboDatabaseHealth } from '../src/client';
 
 describe('checkKboDatabaseHealth', () => {
-  it('returns false when KBO_DATABASE_URL is unset', async () => {
-    const original = process.env.KBO_DATABASE_URL;
-    delete process.env.KBO_DATABASE_URL;
-    await expect(checkKboDatabaseHealth()).resolves.toBe(false);
-    process.env.KBO_DATABASE_URL = original;
+  it('returns true when the default DuckDB database can be opened', async () => {
+    await expect(checkKboDatabaseHealth()).resolves.toBe(true);
   });
 
-  it('returns true when KBO database is reachable', async () => {
-    if (!process.env.KBO_DATABASE_URL) return;
-    const healthy = await checkKboDatabaseHealth();
-    if (!healthy) return;
+  it('returns true for an explicit DuckDB database path', async () => {
+    const healthy = await checkKboDatabaseHealth(process.env.KBO_DATABASE_PATH);
     expect(healthy).toBe(true);
   });
 });

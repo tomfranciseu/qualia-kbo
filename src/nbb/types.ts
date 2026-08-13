@@ -7,7 +7,7 @@ export type NbbAnnualAccountSummary = {
   employeeCount: number | null;
   currency: 'EUR';
   depositDate?: string;
-  error?: 'no_json' | 'fetch_failed';
+  error?: 'no_json' | 'unsupported_format' | 'fetch_failed';
 };
 
 export type NbbFinancialLookupResult = {
@@ -40,4 +40,8 @@ export type NbbAccountingData = {
 
 export type FetchCompanyFinancialsOptions = {
   years?: number;
+  fiscalYear?: number;
+  fiscalYears?: number[];
+  retries?: number;
+  timeoutMs?: number;
 };
