@@ -14,6 +14,12 @@ const NET_RESULT_CODES = ['9904', '990', '9900', '9047'] as const;
 
 /** Average headcount in full-time equivalents (FTE). */
 const EMPLOYEE_COUNT_CODES = ['1003', '9146'] as const;
+const TOTAL_ASSETS_CODES = ['20/58'] as const;
+const EQUITY_CODES = ['10/15'] as const;
+const CASH_AND_INVESTMENTS_CODES = ['54/58'] as const;
+const FINANCIAL_DEBT_CODES = ['17/49'] as const;
+const TRADE_RECEIVABLES_CODES = ['40/41'] as const;
+const TRADE_PAYABLES_CODES = ['44'] as const;
 
 function parseRubricValue(value: string | undefined): number | null {
   if (value === undefined || value.trim() === '') return null;
@@ -76,6 +82,30 @@ export function extractEmployeeCount(rubrics: NbbRubric[] | undefined): number |
   const value = findRubricValue(rubrics, EMPLOYEE_COUNT_CODES);
   if (value === null) return null;
   return Math.round(value * 10) / 10;
+}
+
+export function extractTotalAssets(rubrics: NbbRubric[] | undefined): number | null {
+  return rubrics?.length ? findRubricValue(rubrics, TOTAL_ASSETS_CODES) : null;
+}
+
+export function extractEquity(rubrics: NbbRubric[] | undefined): number | null {
+  return rubrics?.length ? findRubricValue(rubrics, EQUITY_CODES) : null;
+}
+
+export function extractCashAndInvestments(rubrics: NbbRubric[] | undefined): number | null {
+  return rubrics?.length ? findRubricValue(rubrics, CASH_AND_INVESTMENTS_CODES) : null;
+}
+
+export function extractFinancialDebt(rubrics: NbbRubric[] | undefined): number | null {
+  return rubrics?.length ? findRubricValue(rubrics, FINANCIAL_DEBT_CODES) : null;
+}
+
+export function extractTradeReceivables(rubrics: NbbRubric[] | undefined): number | null {
+  return rubrics?.length ? findRubricValue(rubrics, TRADE_RECEIVABLES_CODES) : null;
+}
+
+export function extractTradePayables(rubrics: NbbRubric[] | undefined): number | null {
+  return rubrics?.length ? findRubricValue(rubrics, TRADE_PAYABLES_CODES) : null;
 }
 
 export function computeMarginPercent(

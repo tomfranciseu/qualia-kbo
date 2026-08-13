@@ -1,5 +1,5 @@
 import Papa from 'papaparse';
-import { computeMarginPercent, extractEmployeeCount, extractNetResult, extractRevenue } from './rubrics';
+import { computeMarginPercent, extractCashAndInvestments, extractEmployeeCount, extractEquity, extractFinancialDebt, extractNetResult, extractRevenue, extractTotalAssets, extractTradePayables, extractTradeReceivables } from './rubrics';
 import type { NbbAccountingData, NbbAnnualAccountSummary } from './types';
 
 const CONSULT_BASE_URL = 'https://consult.cbso.nbb.be';
@@ -106,7 +106,7 @@ export async function fetchPublicConsultFinancials(enterpriseNumber: string, req
       const accountingData = parseCsvAccountingData(await response.text());
       const revenue = extractRevenue(accountingData.Rubrics);
       const netResult = extractNetResult(accountingData.Rubrics);
-      years.push({ fiscalYear: deposit.periodEndDateYear, referenceNumber: deposit.reference, revenue, netResult, marginPercent: computeMarginPercent(revenue, netResult), employeeCount: extractEmployeeCount(accountingData.Rubrics), currency: 'EUR', depositDate: deposit.depositDate });
+      years.push({ fiscalYear: deposit.periodEndDateYear, referenceNumber: deposit.reference, revenue, netResult, marginPercent: computeMarginPercent(revenue, netResult), employeeCount: extractEmployeeCount(accountingData.Rubrics), totalAssets: extractTotalAssets(accountingData.Rubrics), equity: extractEquity(accountingData.Rubrics), cashAndInvestments: extractCashAndInvestments(accountingData.Rubrics), financialDebt: extractFinancialDebt(accountingData.Rubrics), tradeReceivables: extractTradeReceivables(accountingData.Rubrics), tradePayables: extractTradePayables(accountingData.Rubrics), currency: 'EUR', depositDate: deposit.depositDate });
     } catch {
       years.push({ fiscalYear: deposit.periodEndDateYear, referenceNumber: deposit.reference, revenue: null, netResult: null, marginPercent: null, employeeCount: null, currency: 'EUR', depositDate: deposit.depositDate, error: 'fetch_failed' });
     }

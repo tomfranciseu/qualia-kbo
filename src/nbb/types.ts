@@ -5,6 +5,12 @@ export type NbbAnnualAccountSummary = {
   netResult: number | null;
   marginPercent: number | null;
   employeeCount: number | null;
+  totalAssets?: number | null;
+  equity?: number | null;
+  cashAndInvestments?: number | null;
+  financialDebt?: number | null;
+  tradeReceivables?: number | null;
+  tradePayables?: number | null;
   currency: 'EUR';
   depositDate?: string;
   error?: 'no_json' | 'unsupported_format' | 'fetch_failed';

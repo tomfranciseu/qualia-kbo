@@ -79,7 +79,13 @@ Generate one Excel-ready row per enterprise for a NACE code and its registered-o
 npm run report:nace-nbb -- 62010 1000 --fiscal-year 2024 --nace-version 2025 --classification MAIN
 ```
 
-The report reads NBB's public CSV export generated from each published XBRL filing; `NBB_CBSO_SUBSCRIPTION_KEY` is not required for this command. It has revenue in EUR, total employees in FTE, NBB reference/deposit metadata, and a `Financial data status` column. Blank revenue or employee values mean that NBB did not provide the applicable rubric; they do not mean zero. Companies that did not file accounts for the requested year are retained with a status.
+Add `--history-years 3` to create one row per company and fiscal year for the requested year plus the two preceding years:
+
+```bash
+npm run report:nace-nbb -- 62010 1000 --fiscal-year 2025 --history-years 3 --nace-version 2025 --classification MAIN
+```
+
+The report reads NBB's public CSV export generated from each published XBRL filing; `NBB_CBSO_SUBSCRIPTION_KEY` is not required for this command. It exports revenue, net profit/loss, total employees (FTE), total assets, equity, cash and investments, financial debt, trade receivables, trade payables, NBB reference/deposit metadata, and a `Financial data status` column. Blank values mean that NBB did not provide the applicable rubric; they do not mean zero. Companies that did not file accounts for the requested year are retained with a status.
 
 The command makes one NBB request at a time by default, waits 750 ms between requests, and retries temporary `429` and `503` responses with backoff. This avoids public-service throttling on large reports. Use `--request-delay-ms 1500` to slow it further if NBB still returns throttling errors; `--concurrency` is capped at 3. Checkpoints are written under `%LOCALAPPDATA%/qualia-kbo/report-cache` to avoid OneDrive file-locking issues. Re-run the same command to continue an interrupted report; failed companies are not cached and are retried. Use `--reset` to discard that checkpoint, `--output path/to/report.csv` to choose the CSV destination, or `--cache path/to/cache.json` to set a custom checkpoint location.
 

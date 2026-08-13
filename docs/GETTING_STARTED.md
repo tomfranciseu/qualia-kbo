@@ -73,6 +73,8 @@ The report downloads NBB's public CSV export generated from each published XBRL 
 npm run report:nace-nbb -- 62010 2840 --fiscal-year 2024 --nace-version 2025 --classification MAIN
 ```
 
+To export a history, add `--history-years`. For example, `--fiscal-year 2025 --history-years 3` returns separate rows for the 2025, 2024, and 2023 filings that are available for each company.
+
 The arguments are:
 
 | Argument | Required | Meaning |
@@ -99,6 +101,10 @@ The default output is `reports/nace-62010-postal-2840-fy2024.csv`.
 | `Returned fiscal year` | Fiscal year returned by NBB; it may be one of the fallback years. |
 | `Revenue EUR` | Revenue extracted from the applicable NBB accounting rubric, in EUR. Blank is not zero. |
 | `Total employees FTE` | Average full-time-equivalent employee count from NBB. Blank is not zero. |
+| `Net profit/loss EUR` | Final annual-account result (`9904`). Positive is profit; negative is loss. |
+| `Total assets EUR`, `Equity EUR` | Scale and capital-strength measures from the balance sheet. |
+| `Cash and investments EUR`, `Financial debt EUR` | Liquidity and financing measures where NBB publishes the rubrics. |
+| `Trade receivables EUR`, `Trade payables EUR` | Working-capital measures where NBB publishes the rubrics. |
 | `Financial data status` | Explains whether a usable annual account was found. |
 | `NBB reference`, `NBB deposit date` | Traceability fields for the annual-account filing. |
 
