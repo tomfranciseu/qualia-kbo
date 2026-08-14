@@ -20,6 +20,13 @@ const CASH_AND_INVESTMENTS_CODES = ['54/58'] as const;
 const FINANCIAL_DEBT_CODES = ['17/49'] as const;
 const TRADE_RECEIVABLES_CODES = ['40/41'] as const;
 const TRADE_PAYABLES_CODES = ['44'] as const;
+const FIXED_ASSETS_CODES = ['20/28'] as const;
+const CURRENT_ASSETS_CODES = ['29/58'] as const;
+const CURRENT_LIABILITIES_CODES = ['42/48'] as const;
+const PROVISIONS_CODES = ['16'] as const;
+const OPERATING_RESULT_CODES = ['9901'] as const;
+const DEPRECIATION_CODES = ['630'] as const;
+const RETAINED_EARNINGS_CODES = ['14'] as const;
 
 function parseRubricValue(value: string | undefined): number | null {
   if (value === undefined || value.trim() === '') return null;
@@ -107,6 +114,14 @@ export function extractTradeReceivables(rubrics: NbbRubric[] | undefined): numbe
 export function extractTradePayables(rubrics: NbbRubric[] | undefined): number | null {
   return rubrics?.length ? findRubricValue(rubrics, TRADE_PAYABLES_CODES) : null;
 }
+
+export function extractFixedAssets(rubrics: NbbRubric[] | undefined): number | null { return rubrics?.length ? findRubricValue(rubrics, FIXED_ASSETS_CODES) : null; }
+export function extractCurrentAssets(rubrics: NbbRubric[] | undefined): number | null { return rubrics?.length ? findRubricValue(rubrics, CURRENT_ASSETS_CODES) : null; }
+export function extractCurrentLiabilities(rubrics: NbbRubric[] | undefined): number | null { return rubrics?.length ? findRubricValue(rubrics, CURRENT_LIABILITIES_CODES) : null; }
+export function extractProvisions(rubrics: NbbRubric[] | undefined): number | null { return rubrics?.length ? findRubricValue(rubrics, PROVISIONS_CODES) : null; }
+export function extractOperatingResult(rubrics: NbbRubric[] | undefined): number | null { return rubrics?.length ? findRubricValue(rubrics, OPERATING_RESULT_CODES) : null; }
+export function extractDepreciation(rubrics: NbbRubric[] | undefined): number | null { return rubrics?.length ? findRubricValue(rubrics, DEPRECIATION_CODES) : null; }
+export function extractRetainedEarnings(rubrics: NbbRubric[] | undefined): number | null { return rubrics?.length ? findRubricValue(rubrics, RETAINED_EARNINGS_CODES) : null; }
 
 export function computeMarginPercent(
   revenue: number | null,

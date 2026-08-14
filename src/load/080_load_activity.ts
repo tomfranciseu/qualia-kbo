@@ -1,6 +1,6 @@
 import { createKboClient } from '../client';
 import { determineEntityType } from './helper';
-import { countCsvDataRows } from './csv';
+import { readCsvBatches } from './csv';
 
 type ActivityInput = { entityNumber: string; activityGroupCode: string; naceVersion: string; naceCode: string; classification: string; enterpriseId?: string; establishmentId?: string };
 type ActivityRow = { EntityNumber: string; ActivityGroup: string; NaceVersion: string; NaceCode: string; Classification: string };
@@ -12,29 +12,18 @@ export function rowToActivityInput(row: ActivityRow): ActivityInput {
 }
 
 export async function loadActivityCSV(filename: string, upsertMode: boolean): Promise<void> {
-  const db = await createKboClient();
-  const totalRows = await countCsvDataRows(filename, 'Activity');
-  const startedAt = performance.now();
   const conflictClause = upsertMode
     ? 'ON CONFLICT ("entityNumber", "activityGroupCode", "naceVersion", "naceCode", "classification") DO UPDATE SET "enterpriseId" = excluded."enterpriseId", "establishmentId" = excluded."establishmentId"'
     : 'ON CONFLICT DO NOTHING';
 
-  console.log(`Activity: 0.0% — loading ${totalRows.toLocaleString()} rows with DuckDB…`);
-  await db.run(`
-    INSERT INTO "Activity" (
-      "entityNumber", "activityGroupCode", "naceVersion", "naceCode", "classification", "enterpriseId", "establishmentId"
-    )
-    SELECT
-      "EntityNumber",
-      "ActivityGroup",
-      "NaceVersion",
-      "NaceCode",
-      "Classification",
-      CASE WHEN regexp_full_match("EntityNumber", '^\\d{4}\\.\\d{3}\\.\\d{3}$') THEN "EntityNumber" END,
-      CASE WHEN regexp_full_match("EntityNumber", '^\\d\\.\\d{3}\\.\\d{3}\\.\\d{3}$') THEN "EntityNumber" END
-    FROM read_csv($1, header = true, all_varchar = true)
-    WHERE "EntityNumber" <> '' AND "NaceCode" <> ''
-    ${conflictClause}
-  `, [filename]);
-  console.log(`Activity: 100.0% — CSV loaded in ${((performance.now() - startedAt) / 1_000).toFixed(1)} seconds.`);
+  await readCsvBatches<ActivityRow, unknown[]>(filename, (row) => {
+    if (!row.EntityNumber || !row.NaceCode) return;
+    const activity = rowToActivityInput(row);
+    return [activity.entityNumber, activity.activityGroupCode, activity.naceVersion, activity.naceCode, activity.classification, activity.enterpriseId ?? null, activity.establishmentId ?? null];
+  }, async (batch) => {
+    const db = await createKboClient();
+    const columns = ['entityNumber', 'activityGroupCode', 'naceVersion', 'naceCode', 'classification', 'enterpriseId', 'establishmentId'];
+    const placeholders = batch.map((row, rowIndex) => `(${row.map((_, columnIndex) => `$${rowIndex * columns.length + columnIndex + 1}`).join(', ')})`).join(', ');
+    await db.run(`INSERT INTO "Activity" (${columns.map((column) => `"${column}"`).join(', ')}) VALUES ${placeholders} ${conflictClause}`, batch.flat());
+  }, 'Activity', 1_400);
 }

@@ -40,11 +40,11 @@
     "load:meta": "tsx src/load/run-file.ts meta",
     "load:audit": "tsx src/load/audit.ts",
     "report:nace-postcodes": "tsx src/report-nace-postal-codes.ts",
-    "report:nace-nbb": "tsx src/report-nace-nbb.ts"
+    "report:nace-nbb": "tsx src/report-nace-nbb.ts",
+    "dashboard": "tsx src/dashboard/server.ts"
   },
   "dependencies": {
     "@duckdb/node-api": "^1.5.5-r.3",
-    "@duckdb/node-api": "^1.5.0-r.1",
     "dotenv": "^17.4.2",
     "papaparse": "^5.5.3",
     "pg": "^8.20.0"

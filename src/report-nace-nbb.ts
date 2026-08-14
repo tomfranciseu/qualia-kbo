@@ -26,12 +26,43 @@ type CachedFinancialResult = {
   financialDebt?: number | null;
   tradeReceivables?: number | null;
   tradePayables?: number | null;
+  fixedAssets?: number | null;
+  currentAssets?: number | null;
+  currentLiabilities?: number | null;
+  provisions?: number | null;
+  operatingResult?: number | null;
+  depreciation?: number | null;
+  retainedEarnings?: number | null;
   referenceNumber?: string;
   depositDate?: string;
   message?: string;
   status: FinancialStatus;
 };
 type ReportRow = NacePostalEnterprise & CachedFinancialResult;
+type FinancialField = {
+  option: string;
+  header: string;
+  value: (row: ReportRow) => number | null | undefined;
+};
+const financialFields: FinancialField[] = [
+  { option: 'revenue', header: 'Revenue EUR', value: (row) => row.revenue },
+  { option: 'net-result', header: 'Net profit/loss EUR', value: (row) => row.netResult },
+  { option: 'employees', header: 'Total employees FTE', value: (row) => row.employeeCount },
+  { option: 'total-assets', header: 'Total assets EUR', value: (row) => row.totalAssets },
+  { option: 'equity', header: 'Equity EUR', value: (row) => row.equity },
+  { option: 'cash', header: 'Cash and investments EUR', value: (row) => row.cashAndInvestments },
+  { option: 'financial-debt', header: 'Financial debt EUR', value: (row) => row.financialDebt },
+  { option: 'receivables', header: 'Trade receivables EUR', value: (row) => row.tradeReceivables },
+  { option: 'payables', header: 'Trade payables EUR', value: (row) => row.tradePayables },
+  { option: 'profit-margin', header: 'Net profit margin %', value: (row) => row.revenue && row.netResult !== undefined && row.netResult !== null ? Math.round(row.netResult / row.revenue * 10000) / 100 : null },
+  { option: 'fixed-assets', header: 'Fixed assets EUR', value: (row) => row.fixedAssets },
+  { option: 'current-assets', header: 'Current assets EUR', value: (row) => row.currentAssets },
+  { option: 'current-liabilities', header: 'Current liabilities EUR', value: (row) => row.currentLiabilities },
+  { option: 'provisions', header: 'Provisions and deferred taxes EUR', value: (row) => row.provisions },
+  { option: 'operating-result', header: 'Operating result EUR', value: (row) => row.operatingResult },
+  { option: 'depreciation', header: 'Depreciation and impairments EUR', value: (row) => row.depreciation },
+  { option: 'retained-earnings', header: 'Retained earnings EUR', value: (row) => row.retainedEarnings },
+];
 
 function getOption(name: string): string | undefined {
   const index = process.argv.indexOf(name);
@@ -88,7 +119,7 @@ async function retrieveFinancials(enterpriseNumber: string, requestedYears: numb
       if (account.error === 'unsupported_format') return { enterpriseNumber, nbbName: result.enterpriseName, returnedFiscalYear: account.fiscalYear, revenue: null, employeeCount: null, referenceNumber: account.referenceNumber, depositDate: account.depositDate, status: 'accounting_pdf_only' as const, message: 'NBB returned the annual account as PDF, not machine-readable accounting data.' };
       if (account.error === 'fetch_failed') return { enterpriseNumber, revenue: null, employeeCount: null, status: 'fetch_failed' as const, message: 'NBB could not retrieve the published XBRL CSV export.' };
       const status: CachedFinancialResult['status'] = account.revenue === null || account.employeeCount === null ? 'partial_financial_data' : 'ok';
-      return { enterpriseNumber, nbbName: result.enterpriseName, returnedFiscalYear: account.fiscalYear, revenue: account.revenue, netResult: account.netResult, employeeCount: account.employeeCount, totalAssets: account.totalAssets, equity: account.equity, cashAndInvestments: account.cashAndInvestments, financialDebt: account.financialDebt, tradeReceivables: account.tradeReceivables, tradePayables: account.tradePayables, referenceNumber: account.referenceNumber, depositDate: account.depositDate, status };
+      return { enterpriseNumber, nbbName: result.enterpriseName, returnedFiscalYear: account.fiscalYear, revenue: account.revenue, netResult: account.netResult, employeeCount: account.employeeCount, totalAssets: account.totalAssets, equity: account.equity, cashAndInvestments: account.cashAndInvestments, financialDebt: account.financialDebt, tradeReceivables: account.tradeReceivables, tradePayables: account.tradePayables, fixedAssets: account.fixedAssets, currentAssets: account.currentAssets, currentLiabilities: account.currentLiabilities, provisions: account.provisions, operatingResult: account.operatingResult, depreciation: account.depreciation, retainedEarnings: account.retainedEarnings, referenceNumber: account.referenceNumber, depositDate: account.depositDate, status };
     });
   } catch (error) {
     const message = error instanceof NbbPublicConsultError ? error.message : 'NBB request failed before a filing could be selected.';
@@ -104,12 +135,17 @@ if (!Number.isInteger(fiscalYear) || fiscalYear < 1900 || fiscalYear > 2100) thr
 const naceVersion = getOption('--nace-version');
 const classification = getOption('--classification');
 const historyYears = Math.min(10, Math.max(1, Number.parseInt(getOption('--history-years') ?? '1', 10) || 1));
-const requestedYears = Array.from({ length: historyYears }, (_, index) => fiscalYear - index);
+const explicitYears = getOption('--years')?.split(',').map((year) => Number.parseInt(year.trim(), 10)).filter((year) => Number.isInteger(year) && year >= 1900 && year <= 2100);
+if (explicitYears && explicitYears.length === 0) throw new Error('--years must be a comma-separated list of four-digit fiscal years.');
+const requestedYears = explicitYears ? [...new Set(explicitYears)].sort((left, right) => right - left) : Array.from({ length: historyYears }, (_, index) => fiscalYear - index);
+const requestedFieldOptions = getOption('--fields')?.split(',').map((field) => field.trim()).filter(Boolean);
+const selectedFinancialFields = requestedFieldOptions ? financialFields.filter((field) => requestedFieldOptions.includes(field.option)) : financialFields;
+if (requestedFieldOptions && selectedFinancialFields.length === 0) throw new Error(`--fields must include at least one of: ${financialFields.map((field) => field.option).join(', ')}.`);
 const concurrency = Math.min(3, Math.max(1, Number.parseInt(getOption('--concurrency') ?? '1', 10) || 1));
 const requestDelayMs = Math.max(0, Number.parseInt(getOption('--request-delay-ms') ?? '750', 10) || 750);
 const reportPath = path.resolve(getOption('--output') ?? `reports/nace-${naceCode}-postal-${postalCode}-fy${fiscalYear}.csv`);
 const defaultCacheDir = path.resolve(process.env.LOCALAPPDATA ?? packageRoot, 'qualia-kbo', 'report-cache');
-const cachePath = path.resolve(getOption('--cache') ?? path.join(defaultCacheDir, `nace-${naceCode}-postal-${postalCode}-fy${fiscalYear}-history${historyYears}.json`));
+const cachePath = path.resolve(getOption('--cache') ?? path.join(defaultCacheDir, `nace-${naceCode}-postal-${postalCode}-years${requestedYears.join('-')}.json`));
 const reset = process.argv.includes('--reset');
 
 try {
@@ -136,8 +172,8 @@ try {
   }));
 
   const rows: ReportRow[] = companies.flatMap((company) => (cache[company.enterpriseNumber] ?? [{ enterpriseNumber: company.enterpriseNumber, revenue: null, employeeCount: null, status: 'fetch_failed' as const, message: 'NBB request did not complete; rerun the report to retry.' }]).map((financials) => ({ ...company, ...financials })));
-  const header = ['Enterprise number', 'KBO name', 'NBB name', 'Postal code', 'NACE code', 'NACE version', 'Classification', 'Requested fiscal year', 'History years requested', 'Returned fiscal year', 'Revenue EUR', 'Net profit/loss EUR', 'Total employees FTE', 'Total assets EUR', 'Equity EUR', 'Cash and investments EUR', 'Financial debt EUR', 'Trade receivables EUR', 'Trade payables EUR', 'Financial data status', 'NBB message', 'NBB reference', 'NBB deposit date'];
-  const csv = [header.join(','), ...rows.map((row) => [row.enterpriseNumber, row.name, row.nbbName, row.postalCode, naceCode, naceVersion, classification, fiscalYear, historyYears, row.returnedFiscalYear, row.revenue, row.netResult, row.employeeCount, row.totalAssets, row.equity, row.cashAndInvestments, row.financialDebt, row.tradeReceivables, row.tradePayables, row.status, row.message, row.referenceNumber, row.depositDate].map(csvValue).join(','))].join('\r\n');
+  const header = ['Enterprise number', 'KBO name', 'NBB name', 'Postal code', 'NACE code', 'NACE version', 'Classification', 'Requested fiscal year', 'History years requested', 'Returned fiscal year', ...selectedFinancialFields.map((field) => field.header), 'Financial data status', 'NBB message', 'NBB reference', 'NBB deposit date'];
+  const csv = [header.join(','), ...rows.map((row) => [row.enterpriseNumber, row.name, row.nbbName, row.postalCode, naceCode, naceVersion, classification, fiscalYear, requestedYears.length, row.returnedFiscalYear, ...selectedFinancialFields.map((field) => field.value(row)), row.status, row.message, row.referenceNumber, row.depositDate].map(csvValue).join(','))].join('\r\n');
   await mkdir(path.dirname(reportPath), { recursive: true });
   await writeFile(reportPath, `\uFEFF${csv}\r\n`, 'utf8');
   console.log(`${rows.length.toLocaleString()} company rows written to ${reportPath}`);

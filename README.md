@@ -1,8 +1,6 @@
 # @qualia/kbo
 
-Belgian KBO (Crossroads Bank for Enterprises) registry — local embedded DuckDB database, ETL loaders, and lookup service.
-
-For a business-user walkthrough of the NACE postcode and NBB company-detail reports, see [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md).
+Belgian KBO (Crossroads Bank for Enterprises) registry — DuckDB or PostgreSQL storage, ETL loaders, lookup service, and local analysis dashboard.
 
 ## Quickstart
 
@@ -18,7 +16,9 @@ npm run load:all
 
 | Variable                      | Default                                  | Description                                                                        |
 | ----------------------------- | ---------------------------------------- | ---------------------------------------------------------------------------------- |
-| `KBO_DATABASE_PATH`         | `%LOCALAPPDATA%/qualia-kbo/kbo.duckdb` | Persisted DuckDB file. Set it to a non-OneDrive local folder on corporate devices. |
+| `KBO_STORAGE`               | `duckdb`                               | Storage backend: `duckdb` for local use or `postgres` for a shared PostgreSQL database. |
+| `KBO_DATABASE_PATH`         | `%LOCALAPPDATA%/qualia-kbo/kbo.duckdb` | Persisted DuckDB file when `KBO_STORAGE=duckdb`. Set it to a non-OneDrive local folder on corporate devices. |
+| `KBO_DATABASE_URL`          | —                                      | PostgreSQL connection string when `KBO_STORAGE=postgres`. |
 | `NBB_CBSO_SUBSCRIPTION_KEY` | —                                       | NBB CBSO API subscription key (annual accounts)                                    |
 | `NBB_CBSO_BASE_URL`         | `https://ws.cbso.nbb.be`               | NBB CBSO API base URL (UAT:`https://ws.uat2.cbso.nbb.be`)                        |
 
@@ -33,8 +33,25 @@ npm run load:all
 | `npm run load:audit`                                                                                                                                                           | Compare every loaded table with its eligible, de-duplicated CSV rows                   |
 | `npm run report:nace-postcodes`                                                                                                                                                | Prompt for a NACE code and write an Excel-ready postal-code count CSV                  |
 | `npm run report:nace-nbb`                                                                                                                                                      | Write an Excel-ready NACE/postal-code company report enriched from NBB annual accounts |
+| `npm run dashboard`                                                                                                                                                            | Start the local KBO Navigator browser dashboard at `http://localhost:4173`             |
 | `npm run check:types`                                                                                                                                                          | TypeScript check                                                                       |
 | `npm test`                                                                                                                                                                     | Vitest unit tests                                                                      |
+
+### PostgreSQL backend
+
+DuckDB is the default and suits a single-user local installation. To use PostgreSQL as a shared backend, start the included database and set the storage variables before running database initialization and the loaders:
+
+```bash
+docker compose up -d
+KBO_STORAGE=postgres
+KBO_DATABASE_URL=postgresql://kbo:kbo@localhost:5436/kbo
+npm run db:init
+npm run load:all
+```
+
+On PowerShell, set the two variables with `$env:KBO_STORAGE = 'postgres'` and `$env:KBO_DATABASE_URL = 'postgresql://kbo:kbo@localhost:5436/kbo'`. Each deployment uses one active backend at a time; the application does not automatically synchronize DuckDB and PostgreSQL data.
+
+To run the optional PostgreSQL integration test on a machine with a PostgreSQL instance, set `KBO_POSTGRES_TEST_URL` to a disposable database connection string before running `npm test`.
 
 ## Consumption from monday2.0
 
@@ -58,6 +75,18 @@ const { enterprises, total } = await listEnterprisesByNaceCode('62010', {
 ```
 
 Requires `activity.csv` loaded (`npm run load:activity` or `load:all`).
+
+### Local dashboard
+
+Start the dashboard after loading the KBO tables:
+
+```bash
+npm run dashboard
+```
+
+Open `http://localhost:4173` in a browser. Select a NACE-BEL version and activity, then analyse its postcode clusters. Select a postcode in the cluster chart to open the matching enterprise list. Beneath that list, expand **NBB report options** to choose fiscal years and financial fields, then run the NBB report.
+
+Completed dashboard reports are stored in local DuckDB. Returning to the same NACE activity, classification, postcode, years, and fields loads the latest saved result instead of requesting NBB again. Use the results table's **Columns** control to choose displayed measures or **Pivot by company** to compare one measure by fiscal year. You can also drop a previously exported NBB CSV into the page for browser-only analysis; it is not uploaded to an external service. Set `KBO_DASHBOARD_PORT` if port `4173` is already in use.
 
 ### Enterprises by NACE-BEL and postal code
 
@@ -83,6 +112,12 @@ Add `--history-years 3` to create one row per company and fiscal year for the re
 
 ```bash
 npm run report:nace-nbb -- 62010 1000 --fiscal-year 2025 --history-years 3 --nace-version 2025 --classification MAIN
+```
+
+Use `--years` when the selected years are not a consecutive history (for example `--years 2025,2023,2021`). Use `--fields` to limit the financial columns exported. Supported fields are `revenue`, `net-result`, `employees`, `total-assets`, `equity`, `cash`, `financial-debt`, `receivables`, and `payables`:
+
+```bash
+npm run report:nace-nbb -- 62010 1000 --fiscal-year 2025 --years 2025,2024,2022 --nace-version 2025 --classification MAIN --fields revenue,net-result,employees,total-assets,equity
 ```
 
 The report reads NBB's public CSV export generated from each published XBRL filing; `NBB_CBSO_SUBSCRIPTION_KEY` is not required for this command. It exports revenue, net profit/loss, total employees (FTE), total assets, equity, cash and investments, financial debt, trade receivables, trade payables, NBB reference/deposit metadata, and a `Financial data status` column. Blank values mean that NBB did not provide the applicable rubric; they do not mean zero. Companies that did not file accounts for the requested year are retained with a status.

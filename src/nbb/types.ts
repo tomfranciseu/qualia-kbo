@@ -11,6 +11,13 @@ export type NbbAnnualAccountSummary = {
   financialDebt?: number | null;
   tradeReceivables?: number | null;
   tradePayables?: number | null;
+  fixedAssets?: number | null;
+  currentAssets?: number | null;
+  currentLiabilities?: number | null;
+  provisions?: number | null;
+  operatingResult?: number | null;
+  depreciation?: number | null;
+  retainedEarnings?: number | null;
   currency: 'EUR';
   depositDate?: string;
   error?: 'no_json' | 'unsupported_format' | 'fetch_failed';

@@ -16,12 +16,12 @@ export async function listEnterprisesByNaceCode(naceCode: string, options: ListE
   const classification = options.classification?.trim() || null;
   const db = await createKboClient(options.databasePath ?? options.databaseUrl);
   const params = [code, version, classification];
-  const source = `SELECT a."enterpriseId" AS "enterpriseNumber" FROM "Activity" a WHERE a."naceCode" = $1 AND a."enterpriseId" IS NOT NULL AND ($2 IS NULL OR a."naceVersion" = $2) AND ($3 IS NULL OR a."classification" = $3) UNION SELECT est."enterpriseNumber" FROM "Activity" a JOIN "Establishment" est ON est."establishmentNumber" = a."establishmentId" WHERE a."naceCode" = $1 AND a."establishmentId" IS NOT NULL AND ($2 IS NULL OR a."naceVersion" = $2) AND ($3 IS NULL OR a."classification" = $3)`;
+  const source = `SELECT a."enterpriseId" AS "enterpriseNumber" FROM "Activity" a WHERE (a."naceCode" = $1 OR a."naceCode" LIKE $1 || '%') AND a."enterpriseId" IS NOT NULL AND ($2 IS NULL OR a."naceVersion" = $2) AND ($3 IS NULL OR a."classification" = $3) UNION SELECT est."enterpriseNumber" FROM "Activity" a JOIN "Establishment" est ON est."establishmentNumber" = a."establishmentId" WHERE (a."naceCode" = $1 OR a."naceCode" LIKE $1 || '%') AND a."establishmentId" IS NOT NULL AND ($2 IS NULL OR a."naceVersion" = $2) AND ($3 IS NULL OR a."classification" = $3)`;
   const [{ total }] = await db.all<{ total: number }>(`WITH hits AS (${source}) SELECT count(*) AS total FROM hits`, params);
   const hits = await db.all<{ enterpriseNumber: string }>(`WITH hits AS (${source}) SELECT "enterpriseNumber" FROM hits ORDER BY "enterpriseNumber" LIMIT $4 OFFSET $5`, [...params, limit, offset]);
   if (hits.length === 0) return { enterprises: [], total: Number(total) };
   const enterprises = await Promise.all(hits.map(async ({ enterpriseNumber }) => {
-    const [row] = await db.all<{ name: string | null; city: string | null; status: string | null; juridicalForm: string | null }>(`SELECT d."denomination" AS name, coalesce(address."municipalityNL", address."municipalityFR") AS city, status."description" AS status, form."description" AS "juridicalForm" FROM "Enterprise" e LEFT JOIN "Denomination" d ON d."enterpriseId" = e."enterpriseNumber" AND d."languageCode" = 'NL' LEFT JOIN "KBOAddress" address ON address."enterpriseId" = e."enterpriseNumber" LEFT JOIN "Code" status ON status."category" = 'Status' AND status."code" = e."KBOstatusCode" LEFT JOIN "Code" form ON form."category" = 'JuridicalForm' AND form."code" = e."juridicalFormCode" WHERE e."enterpriseNumber" = $1 LIMIT 1`, [enterpriseNumber]);
+    const [row] = await db.all<{ name: string | null; city: string | null; status: string | null; juridicalForm: string | null }>(`SELECT coalesce((SELECT d."denomination" FROM "Denomination" d WHERE d."enterpriseId" = e."enterpriseNumber" ORDER BY CASE d."languageCode" WHEN 'NL' THEN 0 WHEN 'FR' THEN 1 ELSE 2 END, d."typeOfDenominationCode" LIMIT 1), '') AS name, coalesce(address."municipalityNL", address."municipalityFR") AS city, status."description" AS status, form."description" AS "juridicalForm" FROM "Enterprise" e LEFT JOIN "KBOAddress" address ON address."enterpriseId" = e."enterpriseNumber" LEFT JOIN "Code" status ON status."category" = 'Status' AND status."code" = e."KBOstatusCode" LEFT JOIN "Code" form ON form."category" = 'JuridicalForm' AND form."code" = e."juridicalFormCode" WHERE e."enterpriseNumber" = $1 LIMIT 1`, [enterpriseNumber]);
     return row ? { enterpriseNumber, name: row.name ?? '', city: row.city ?? undefined, status: row.status ?? undefined, juridicalForm: row.juridicalForm ?? undefined, naceCodes: [code], classifications: classification ? [classification] : [] } : null;
   }));
   return { total: Number(total), enterprises: enterprises.filter((row) => row !== null).map((row) => ({
@@ -50,7 +50,7 @@ export async function countEnterprisesByNacePostalCode(naceCode: string, options
     WITH hits AS (
       SELECT a."enterpriseId" AS "enterpriseNumber"
       FROM "Activity" a
-      WHERE a."naceCode" = $1
+      WHERE (a."naceCode" = $1 OR a."naceCode" LIKE $1 || '%')
         AND a."enterpriseId" IS NOT NULL
         AND ($2 IS NULL OR a."naceVersion" = $2)
         AND ($3 IS NULL OR a."classification" = $3)
@@ -58,7 +58,7 @@ export async function countEnterprisesByNacePostalCode(naceCode: string, options
       SELECT est."enterpriseNumber"
       FROM "Activity" a
       JOIN "Establishment" est ON est."establishmentNumber" = a."establishmentId"
-      WHERE a."naceCode" = $1
+      WHERE (a."naceCode" = $1 OR a."naceCode" LIKE $1 || '%')
         AND a."establishmentId" IS NOT NULL
         AND ($2 IS NULL OR a."naceVersion" = $2)
         AND ($3 IS NULL OR a."classification" = $3)
@@ -87,22 +87,22 @@ export async function listEnterprisesByNaceAndPostalCode(naceCode: string, posta
     WITH hits AS (
       SELECT a."enterpriseId" AS "enterpriseNumber"
       FROM "Activity" a
-      WHERE a."naceCode" = $1 AND a."enterpriseId" IS NOT NULL
+      WHERE (a."naceCode" = $1 OR a."naceCode" LIKE $1 || '%') AND a."enterpriseId" IS NOT NULL
         AND ($3 IS NULL OR a."naceVersion" = $3)
         AND ($4 IS NULL OR a."classification" = $4)
       UNION
       SELECT est."enterpriseNumber"
       FROM "Activity" a
       JOIN "Establishment" est ON est."establishmentNumber" = a."establishmentId"
-      WHERE a."naceCode" = $1 AND a."establishmentId" IS NOT NULL
+      WHERE (a."naceCode" = $1 OR a."naceCode" LIKE $1 || '%') AND a."establishmentId" IS NOT NULL
         AND ($3 IS NULL OR a."naceVersion" = $3)
         AND ($4 IS NULL OR a."classification" = $4)
     )
     SELECT hits."enterpriseNumber", coalesce((
       SELECT d."denomination"
       FROM "Denomination" d
-      WHERE d."enterpriseId" = hits."enterpriseNumber" AND d."languageCode" = 'NL'
-      ORDER BY d."typeOfDenominationCode"
+      WHERE d."enterpriseId" = hits."enterpriseNumber"
+      ORDER BY CASE d."languageCode" WHEN 'NL' THEN 0 WHEN 'FR' THEN 1 ELSE 2 END, d."typeOfDenominationCode"
       LIMIT 1
     ), '') AS "name", $2 AS "postalCode"
     FROM hits

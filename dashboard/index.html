@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>KBO Navigator</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand"><span class="brand-mark">K</span><div><strong>KBO Navigator</strong><small>Belgian business intelligence workspace</small></div></div>
+      <div class="connection" id="connection"><span class="dot"></span><span>Checking local database…</span></div>
+    </header>
+
+    <main>
+      <section class="filter-card" aria-label="KBO selection filters">
+        <div class="filter-heading"><span class="step">01</span><div><h2>Build a market slice</h2><p>Start with an activity, then focus on the places that matter.</p></div></div>
+        <div class="filter-grid">
+          <label>NACE version<select id="naceVersion"><option value="">Select a version first</option><option value="2025" selected>NACE-BEL 2025</option><option value="2008">NACE-BEL 2008</option><option value="2003">NACE-BEL 2003</option></select></label>
+          <label><span class="label-title">NACE-BEL activity <span class="help"><button type="button" aria-label="How to select a NACE activity">?</button><span>Select a NACE version first, then use Find activity to filter the list or enter a code directly.</span></span></span><input id="naceCode" list="naceCodeOptions" disabled placeholder="Enter a NACE code or select an activity"><datalist id="naceCodeOptions"></datalist><small id="naceDescription" class="visually-hidden">Choose a version, then search, select, or enter an activity code.</small></label>
+          <label>Activity type<select id="classification"><option value="">All classifications</option><option value="MAIN" selected>Main activity</option><option value="SECO">Secondary activity</option><option value="ANCI">Auxiliary activity</option></select></label>
+          <button id="analyse" class="primary">Analyse KBO data <span>→</span></button>
+        </div>
+        <div class="quick-picks"><span>Quick picks</span><button data-nace="62010">Software · 62010</button><button data-nace="66220">Insurance agents · 66220</button><button data-nace="70220">Business advice · 70220</button><button data-nace="47710">Fashion retail · 47710</button></div>
+      </section>
+
+      <section id="kboSection" class="dashboard-section hidden">
+        <div class="section-title"><div><p class="eyebrow">KBO ACTIVITY MAP</p><h2 id="selectionTitle">Market footprint</h2><p id="selectionDescription"></p></div><button id="showCompanies" class="ghost">View companies <span>→</span></button></div>
+        <div class="metric-grid" id="kboMetrics"></div>
+        <div class="dashboard-grid two-one">
+          <article class="panel chart-panel"><div class="panel-header"><div><h3>Where activity clusters</h3><p>Distinct enterprises by registered-office postal code · select a postal code to analyse it</p></div><span class="pill">Top 10</span></div><div id="postcodeChart" class="bar-chart"></div></article>
+          <article class="panel insight-panel"><p class="eyebrow">MARKET SIGNAL</p><div id="marketInsight" class="insight-copy"></div><div class="ring" id="coverageRing"><span>—</span><small>top share</small></div></article>
+        </div>
+      </section>
+
+      <section id="companiesSection" class="dashboard-section hidden">
+        <div class="section-title"><div><p class="eyebrow">ENTERPRISE DRILL-DOWN</p><h2>Companies in this selection</h2></div><span id="companyCount" class="pill">—</span></div>
+        <article class="panel"><div class="panel-header"><div><h3>Registered enterprises</h3><p id="companySubtitle">Choose a postal code for a precise company list.</p></div><input id="companySearch" type="search" placeholder="Search company or enterprise number"></div><div class="table-wrap"><table><thead><tr><th>Enterprise</th><th>Enterprise number</th><th>Postal code</th></tr></thead><tbody id="companyRows"></tbody></table></div></article>
+        <article class="panel report-builder">
+          <details class="report-options"><summary>NBB report options <span id="reportSelectionSummary">Select a NACE activity and postal code to prepare this report.</span></summary><div class="builder-grid">
+            <label>Postal code for the NBB report<input id="reportPostalCode" inputmode="numeric" placeholder="Select a postcode above"></label>
+            <details class="multi-select" id="historySelector"><summary><span>Fiscal years to retrieve</span><strong id="historySummary">2024, 2023, 2022</strong></summary><div id="historyOptions" class="check-options"></div></details>
+            <details class="multi-select" open><summary><span>Account information to extract</span><strong id="fieldSummary">9 selected</strong></summary><div class="check-options" id="fieldOptions">
+              <label><input type="checkbox" value="revenue" checked> Revenue</label><label><input type="checkbox" value="net-result" checked> Net profit/loss</label><label><input type="checkbox" value="employees" checked> Employees (FTE)</label><label><input type="checkbox" value="total-assets" checked> Total assets</label><label><input type="checkbox" value="equity" checked> Equity</label><label><input type="checkbox" value="cash" checked> Cash &amp; investments</label><label><input type="checkbox" value="financial-debt" checked> Financial debt</label><label><input type="checkbox" value="receivables" checked> Trade receivables</label><label><input type="checkbox" value="payables" checked> Trade payables</label>
+            </div></details>
+          </div><details class="advanced-fields"><summary>Expand for additional balance-sheet and performance details <span>⌄</span></summary><div class="check-options" id="advancedFieldOptions"><label><input type="checkbox" value="profit-margin"> Net profit margin</label><label><input type="checkbox" value="fixed-assets"> Fixed assets</label><label><input type="checkbox" value="current-assets"> Current assets</label><label><input type="checkbox" value="current-liabilities"> Current liabilities</label><label><input type="checkbox" value="provisions"> Provisions and deferred taxes</label><label><input type="checkbox" value="operating-result"> Operating result</label><label><input type="checkbox" value="depreciation"> Depreciation and impairments</label><label><input type="checkbox" value="retained-earnings"> Retained earnings</label></div></details></details>
+          <div class="command-box"><code id="reportCommand">Select a NACE activity, postal code, fiscal years, and account fields to enable the run.</code><button id="runReport" class="primary" disabled>Run NBB report</button></div><p id="reportBuilderHint" class="builder-hint">Results are stored in the local DuckDB database. The run uses NBB's public filing export and is rate-limited.</p>
+        </article>
+        <article id="localReportResults" class="panel hidden"><div class="panel-header"><div><h3>Local NBB report results</h3><p id="runProgress">Preparing report…</p><p id="reportResultSelection"></p></div><button id="exportLocalReport" class="ghost" disabled>Export CSV</button></div><div class="result-toolbar"><details class="result-columns"><summary>Columns</summary><div id="reportColumnOptions" class="check-options"></div></details><label>View<select id="reportView"><option value="rows">Companies and years</option><option value="pivot">Pivot by company</option></select></label><label id="pivotValueLabel" class="hidden">Pivot value<select id="pivotValue"></select></label></div><div class="table-wrap"><table><thead id="localReportHead"></thead><tbody id="localReportRows"></tbody></table></div></article>
+      </section>
+
+      <section class="nbb-section">
+        <label id="dropZone" class="drop-zone"><input id="csvFile" type="file" accept=".csv,text/csv"><span class="upload-icon">↑</span><strong>Drop an NBB report CSV here</strong><small>or browse for a file · no upload to a server</small></label>
+        <div id="nbbDashboard" class="hidden">
+          <div class="filter-strip"><strong id="reportName">Financial report</strong><label>Status<select id="financialStatus"><option value="">All statuses</option><option value="ok">Complete financial data</option><option value="partial_financial_data">Partial data</option><option value="no_account_for_year">No filing</option></select></label><label>Min. revenue<input id="minRevenue" type="number" min="0" placeholder="0"></label><label><input id="profitableOnly" type="checkbox"> Profit-making only</label><button id="applyFinancialFilters" class="ghost">Apply filters</button></div>
+          <div class="metric-grid" id="financialMetrics"></div>
+          <div class="dashboard-grid two-one"><article class="panel chart-panel"><div class="panel-header"><div><h3>Revenue leaders</h3><p>Top companies in the active financial selection</p></div><span class="pill">EUR</span></div><div id="revenueChart" class="bar-chart"></div></article><article class="panel insight-panel"><p class="eyebrow">DATA QUALITY</p><div id="financialInsight" class="insight-copy"></div><div class="ring amber" id="qualityRing"><span>—</span><small>complete</small></div></article></div>
+          <article class="panel"><div class="panel-header"><div><h3>Financial screening</h3><p>Sort and filter in your spreadsheet for more detailed analysis.</p></div><span id="financialCount" class="pill">—</span></div><div class="table-wrap"><table><thead><tr><th>Company</th><th>Postcode</th><th>Year</th><th>Revenue</th><th>Net result</th><th>FTE</th><th>Status</th></tr></thead><tbody id="financialRows"></tbody></table></div></article>
+        </div>
+      </section>
+    </main>
+    <footer>Built for local KBO analysis · KBO Navigator</footer>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

@@ -1,4 +1,4 @@
-export { createKboClient, disconnectKboClient, checkKboDatabaseHealth } from './client';
+export { createKboClient, disconnectKboClient, checkKboDatabaseHealth, getKboDatabaseLocation } from './client';
 export { lookupByEnterpriseNumber, lookupByName, lookupByVatNumber } from './lookup';
 export { countEnterprisesByNacePostalCode, listEnterprisesByNaceAndPostalCode, listEnterprisesByNaceCode } from './activity';
 export type {
