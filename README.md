@@ -18,6 +18,7 @@ npm run load:all
 | ----------------------------- | ---------------------------------------- | ---------------------------------------------------------------------------------- |
 | `KBO_STORAGE`               | `duckdb`                               | Storage backend: `duckdb` for local use or `postgres` for a shared PostgreSQL database. |
 | `KBO_DATABASE_PATH`         | `%LOCALAPPDATA%/qualia-kbo/kbo.duckdb` | Persisted DuckDB file when `KBO_STORAGE=duckdb`. Set it to a non-OneDrive local folder on corporate devices. |
+| `KBO_DUCKDB_ACCESS_MODE`    | `read_write`                            | Use `read_only` only when every process accessing the same DuckDB file is read-only. |
 | `KBO_DATABASE_URL`          | —                                      | PostgreSQL connection string when `KBO_STORAGE=postgres`. |
 | `NBB_CBSO_SUBSCRIPTION_KEY` | —                                       | NBB CBSO API subscription key (annual accounts)                                    |
 | `NBB_CBSO_BASE_URL`         | `https://ws.cbso.nbb.be`               | NBB CBSO API base URL (UAT:`https://ws.uat2.cbso.nbb.be`)                        |
@@ -53,6 +54,12 @@ npm run load:all
 On PowerShell, set the two variables with `$env:KBO_STORAGE = 'postgres'` and `$env:KBO_DATABASE_URL = 'postgresql://kbo:kbo@localhost:5436/kbo'`. Each deployment uses one active backend at a time; the application does not automatically synchronize DuckDB and PostgreSQL data.
 
 To run the optional PostgreSQL integration test on a machine with a PostgreSQL instance, set `KBO_POSTGRES_TEST_URL` to a disposable database connection string before running `npm test`.
+
+### DuckDB locking and concurrent use
+
+DuckDB supports concurrent reads and writes from multiple connections **within one process**. Its embedded file format permits only one process to open a database in read-write mode, which is why a dashboard, ETL loader, database viewer, or another Node.js process can prevent a second process from opening the same file.
+
+For multiple read-only processes, initialize the database first, then set `KBO_DUCKDB_ACCESS_MODE=read_only` in every reader process. Do not combine read-only and read-write processes against the same file. For multiple users, app servers, or concurrent dashboard/report writes, use the PostgreSQL backend instead. Keep DuckDB files outside OneDrive and network shares because synchronization and network filesystem locks can be unreliable.
 
 ## Consumption from monday2.0
 

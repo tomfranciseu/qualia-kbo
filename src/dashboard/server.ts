@@ -45,6 +45,7 @@ async function requestBody(request: IncomingMessage): Promise<Record<string, unk
 async function runFinancialReport(runId: string, input: { naceCode: string; naceVersion: string; classification?: string; postalCode: string; years: number[]; fields: string[] }): Promise<void> {
   const db = await createKboClient();
   const fieldMap: Record<string, string> = { revenue: 'revenue', 'net-result': 'netResult', employees: 'employeeCount', 'total-assets': 'totalAssets', equity: 'equity', cash: 'cashAndInvestments', 'financial-debt': 'financialDebt', receivables: 'tradeReceivables', payables: 'tradePayables', 'profit-margin': 'marginPercent', 'fixed-assets': 'fixedAssets', 'current-assets': 'currentAssets', 'current-liabilities': 'currentLiabilities', provisions: 'provisions', 'operating-result': 'operatingResult', depreciation: 'depreciation', 'retained-earnings': 'retainedEarnings' };
+  const insuranceFields = ['insuranceInvestments', 'unitLinkedInvestments', 'technicalProvisions', 'lifeTechnicalProvisions', 'claimsProvisions', 'reinsuranceShareTechnicalProvisions', 'insuranceReceivables', 'reinsuranceDeposits'] as const;
   try {
     const companies = await listEnterprisesByNaceAndPostalCode(input.naceCode, input.postalCode, { naceVersion: input.naceVersion, classification: input.classification });
     await db.run('UPDATE "DashboardReportRun" SET "status" = $1, "totalCompanies" = $2, "updatedAt" = current_timestamp WHERE "id" = $3', ['running', String(companies.length), runId]);
@@ -53,17 +54,23 @@ async function runFinancialReport(runId: string, input: { naceCode: string; nace
       try {
         const financials = await fetchPublicConsultFinancials(company.enterpriseNumber, input.years, fetch, { requestDelayMs: 750 });
         const entries = financials.years.length ? financials.years : [];
+        const kboData = { kboStatus: company.status ?? null, juridicalSituation: company.juridicalSituation ?? null, startDate: company.startDate ?? null, juridicalForm: company.juridicalForm ?? null };
         if (entries.length === 0) {
-          const data = Object.fromEntries(input.fields.map((field) => [fieldMap[field], null]));
+          const data = { ...Object.fromEntries(input.fields.map((field) => [fieldMap[field], null])), ...kboData };
           await db.run('INSERT INTO "DashboardReportRow" ("runId", "enterpriseNumber", "name", "postalCode", "fiscalYear", "status", "message", "data") VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT ("runId", "enterpriseNumber", "fiscalYear") DO UPDATE SET "name" = excluded."name", "postalCode" = excluded."postalCode", "status" = excluded."status", "message" = excluded."message", "data" = excluded."data"', [runId, company.enterpriseNumber, company.name, company.postalCode, String(input.years[0]), 'no_account_for_year', 'NBB returned no published annual account for the selected fiscal years.', JSON.stringify(data)]);
         }
         for (const entry of entries) {
           const status = entry.error ? 'partial_financial_data' : 'ok';
-          const data = Object.fromEntries(input.fields.map((field) => [fieldMap[field], entry[fieldMap[field] as keyof typeof entry] ?? null]));
+          const data = {
+            ...Object.fromEntries(input.fields.map((field) => [fieldMap[field], entry[fieldMap[field] as keyof typeof entry] ?? null])),
+            ...Object.fromEntries(insuranceFields.map((field) => [field, entry[field] ?? null])),
+            ...kboData,
+          };
           await db.run('INSERT INTO "DashboardReportRow" ("runId", "enterpriseNumber", "name", "postalCode", "fiscalYear", "status", "message", "data") VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT ("runId", "enterpriseNumber", "fiscalYear") DO UPDATE SET "name" = excluded."name", "postalCode" = excluded."postalCode", "status" = excluded."status", "message" = excluded."message", "data" = excluded."data"', [runId, company.enterpriseNumber, company.name, company.postalCode, String(entry.fiscalYear), status, entry.error ?? null, JSON.stringify(data)]);
         }
       } catch (error) {
-        await db.run('INSERT INTO "DashboardReportRow" ("runId", "enterpriseNumber", "name", "postalCode", "fiscalYear", "status", "message", "data") VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT ("runId", "enterpriseNumber", "fiscalYear") DO UPDATE SET "name" = excluded."name", "postalCode" = excluded."postalCode", "status" = excluded."status", "message" = excluded."message", "data" = excluded."data"', [runId, company.enterpriseNumber, company.name, company.postalCode, String(input.years[0]), 'fetch_failed', error instanceof Error ? error.message : 'NBB retrieval failed.', '{}']);
+        const data = { kboStatus: company.status ?? null, juridicalSituation: company.juridicalSituation ?? null, startDate: company.startDate ?? null, juridicalForm: company.juridicalForm ?? null };
+        await db.run('INSERT INTO "DashboardReportRow" ("runId", "enterpriseNumber", "name", "postalCode", "fiscalYear", "status", "message", "data") VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT ("runId", "enterpriseNumber", "fiscalYear") DO UPDATE SET "name" = excluded."name", "postalCode" = excluded."postalCode", "status" = excluded."status", "message" = excluded."message", "data" = excluded."data"', [runId, company.enterpriseNumber, company.name, company.postalCode, String(input.years[0]), 'fetch_failed', error instanceof Error ? error.message : 'NBB retrieval failed.', JSON.stringify(data)]);
       }
       completed += 1;
       await db.run('UPDATE "DashboardReportRun" SET "completedCompanies" = $1, "updatedAt" = current_timestamp WHERE "id" = $2', [String(completed), runId]);
@@ -151,14 +158,26 @@ async function handleApi(url: URL, request: IncomingMessage, response: ServerRes
     const postalCode = typeof input.postalCode === 'string' ? input.postalCode.trim() : '';
     const classification = typeof input.classification === 'string' ? input.classification.trim() : undefined;
     const fields = Array.isArray(input.fields) ? input.fields.filter((field): field is string => typeof field === 'string') : [];
+    const reset = input.reset === true;
     if (!naceCodeValue || !naceVersion || !postalCode || !years.length || !fields.length) throw new Error('Select a NACE activity, postal code, one or more fiscal years, and one or more fields.');
     const runId = randomUUID(); const db = await createKboClient();
+    if (reset) {
+      const parameters = [naceCodeValue, naceVersion, classification ?? null, postalCode, years.join(','), fields.join(',')];
+      const matchingRuns = await db.all<{ id: string }>('SELECT "id" FROM "DashboardReportRun" WHERE "naceCode" = $1 AND "naceVersion" = $2 AND COALESCE("classification", \'\') = COALESCE($3, \'\') AND "postalCode" = $4 AND "fiscalYears" = $5 AND "fields" = $6 AND "status" NOT IN (\'queued\', \'running\')', parameters);
+      for (const run of matchingRuns) await db.run('DELETE FROM "DashboardReportRow" WHERE "runId" = $1', [run.id]);
+      await db.run('DELETE FROM "DashboardReportRun" WHERE "naceCode" = $1 AND "naceVersion" = $2 AND COALESCE("classification", \'\') = COALESCE($3, \'\') AND "postalCode" = $4 AND "fiscalYears" = $5 AND "fields" = $6 AND "status" NOT IN (\'queued\', \'running\')', parameters);
+    }
     await db.run('INSERT INTO "DashboardReportRun" ("id", "createdAt", "updatedAt", "status", "naceCode", "naceVersion", "classification", "postalCode", "fiscalYears", "fields", "totalCompanies", "completedCompanies") VALUES ($1, current_timestamp, current_timestamp, $2, $3, $4, $5, $6, $7, $8, 0, 0)', [runId, 'queued', naceCodeValue, naceVersion, classification ?? null, postalCode, years.join(','), fields.join(',')]);
     void runFinancialReport(runId, { naceCode: naceCodeValue, naceVersion, classification, postalCode, years: [...new Set(years)].sort((a, b) => b - a), fields });
     sendJson(response, { id: runId, status: 'queued' }, 202); return;
   }
 
   if (url.pathname === '/api/reports' && request.method === 'GET') {
+    if (optionalParam(url, 'all') === 'true') {
+      const db = await createKboClient();
+      const rows = await db.all<{ enterpriseNumber: string; name: string; postalCode: string; fiscalYear: number; status: string; message: string | null; data: string; naceCode: string; naceVersion: string; classification: string | null; runId: string }>('SELECT "DashboardReportRow".*, "DashboardReportRun"."naceCode", "DashboardReportRun"."naceVersion", "DashboardReportRun"."classification" FROM "DashboardReportRow" INNER JOIN "DashboardReportRun" ON "DashboardReportRun"."id" = "DashboardReportRow"."runId" WHERE "DashboardReportRun"."status" = $1 ORDER BY "DashboardReportRun"."updatedAt" DESC, "DashboardReportRow"."name", "DashboardReportRow"."fiscalYear" DESC', ['completed']);
+      sendJson(response, { rows: rows.map((row) => ({ ...row, data: JSON.parse(row.data) })) }); return;
+    }
     const naceCodeValue = requiredParam(url, 'naceCode');
     const naceVersion = requiredParam(url, 'naceVersion');
     const postalCode = requiredParam(url, 'postalCode');
@@ -193,9 +212,18 @@ const server = createServer(async (request: IncomingMessage, response: ServerRes
   }
 });
 
-server.listen(port, () => {
-  console.log(`KBO Navigator is running at http://localhost:${port}`);
-  console.log('Use Ctrl+C to stop the dashboard.');
+async function start(): Promise<void> {
+  const db = await createKboClient();
+  await db.run('UPDATE "DashboardReportRun" SET "status" = $1, "message" = $2, "updatedAt" = current_timestamp WHERE "status" IN ($3, $4)', ['failed', 'Dashboard server restarted before this report completed. Reset and run it again.', 'queued', 'running']);
+  server.listen(port, () => {
+    console.log(`KBO Navigator is running at http://localhost:${port}`);
+    console.log('Use Ctrl+C to stop the dashboard.');
+  });
+}
+
+void start().catch((error: unknown) => {
+  console.error(error);
+  process.exitCode = 1;
 });
 
 async function shutdown(): Promise<void> {

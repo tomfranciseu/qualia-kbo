@@ -31,12 +31,15 @@ export type KboClient = {
 };
 
 export type KboStorage = 'duckdb' | 'postgres';
+export type DuckDbAccessMode = 'read_only' | 'read_write';
 
 let duckConnection: DuckDBConnection | undefined;
+let duckInstance: DuckDBInstance | undefined;
 let postgresPool: Pool | undefined;
 let postgresTransactionClient: PoolClient | undefined;
 let storage: KboStorage | undefined;
 let databaseLocation: string | undefined;
+let duckDbAccessMode: DuckDbAccessMode | undefined;
 let transactionDepth = 0;
 /** Postgres caps bind params near 65k; DuckDB can take larger inserts for 100k-row CSV batches. */
 const MAX_PARAMETERS_PER_INSERT_POSTGRES = 60_000;
@@ -52,6 +55,13 @@ function getStorage(target?: string): KboStorage {
   if (!configured || configured === 'duckdb') return 'duckdb';
   if (configured === 'postgres' || configured === 'postgresql') return 'postgres';
   throw new Error('KBO_STORAGE must be either "duckdb" or "postgres".');
+}
+
+function getDuckDbAccessMode(): DuckDbAccessMode {
+  const configured = process.env.KBO_DUCKDB_ACCESS_MODE?.trim().toLowerCase();
+  if (!configured || configured === 'read_write' || configured === 'read-write') return 'read_write';
+  if (configured === 'read_only' || configured === 'read-only') return 'read_only';
+  throw new Error('KBO_DUCKDB_ACCESS_MODE must be either "read_write" or "read_only".');
 }
 
 function getPostgresUrl(target?: string): string {
@@ -71,13 +81,23 @@ export function getKboDatabaseLocation(): string {
 export async function createKboClient(target = process.env.KBO_DATABASE_PATH): Promise<KboClient> {
   const selectedStorage = getStorage(target);
   const targetLocation = selectedStorage === 'postgres' ? getPostgresUrl(target) : getKboDatabasePath(target);
-  if (storage && (storage !== selectedStorage || databaseLocation !== targetLocation)) throw new Error(`KBO database is already open at ${databaseLocation}`);
+  const selectedDuckDbAccessMode = selectedStorage === 'duckdb' ? getDuckDbAccessMode() : undefined;
+  if (storage && (storage !== selectedStorage || databaseLocation !== targetLocation || duckDbAccessMode !== selectedDuckDbAccessMode)) throw new Error(`KBO database is already open at ${databaseLocation}`);
 
   if (selectedStorage === 'duckdb' && !duckConnection) {
-    mkdirSync(dirname(targetLocation), { recursive: true });
-    const instance = await DuckDBInstance.fromCache(targetLocation);
-    duckConnection = await instance.connect();
-    await duckConnection.run(schema);
+    try {
+      if (selectedDuckDbAccessMode === 'read_write') mkdirSync(dirname(targetLocation), { recursive: true });
+      duckInstance = await DuckDBInstance.create(targetLocation, { access_mode: selectedDuckDbAccessMode === 'read_only' ? 'READ_ONLY' : 'READ_WRITE' });
+      duckConnection = await duckInstance.connect();
+      if (selectedDuckDbAccessMode === 'read_write') await duckConnection.run(schema);
+    } catch (error) {
+      duckConnection?.closeSync();
+      duckConnection = undefined;
+      duckInstance?.closeSync();
+      duckInstance = undefined;
+      const detail = error instanceof Error ? ` ${error.message}` : '';
+      throw new Error(`Cannot open DuckDB at ${targetLocation}. Another process may hold its write lock. Stop the dashboard, loader, or database viewer using this file; use KBO_DUCKDB_ACCESS_MODE=read_only only when every process is read-only; or use KBO_STORAGE=postgres for shared read/write access.${detail}`);
+    }
   }
   if (selectedStorage === 'postgres' && !postgresPool) {
     postgresPool = new Pool({ connectionString: targetLocation });
@@ -85,6 +105,7 @@ export async function createKboClient(target = process.env.KBO_DATABASE_PATH): P
   }
   storage = selectedStorage;
   databaseLocation = targetLocation;
+  duckDbAccessMode = selectedDuckDbAccessMode;
 
   return {
     async run(sql, values = []) {
@@ -122,11 +143,14 @@ export async function createKboClient(target = process.env.KBO_DATABASE_PATH): P
 export async function disconnectKboClient(): Promise<void> {
   duckConnection?.closeSync();
   duckConnection = undefined;
+  duckInstance?.closeSync();
+  duckInstance = undefined;
   await postgresPool?.end();
   postgresPool = undefined;
   postgresTransactionClient = undefined;
   storage = undefined;
   databaseLocation = undefined;
+  duckDbAccessMode = undefined;
   transactionDepth = 0;
 }
 

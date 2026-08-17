@@ -18,6 +18,15 @@ export type NbbAnnualAccountSummary = {
   operatingResult?: number | null;
   depreciation?: number | null;
   retainedEarnings?: number | null;
+  /** Insurer-specific disclosure fields, populated from the statutory insurance statements when available. */
+  insuranceInvestments?: number | null;
+  unitLinkedInvestments?: number | null;
+  technicalProvisions?: number | null;
+  lifeTechnicalProvisions?: number | null;
+  claimsProvisions?: number | null;
+  reinsuranceShareTechnicalProvisions?: number | null;
+  insuranceReceivables?: number | null;
+  reinsuranceDeposits?: number | null;
   currency: 'EUR';
   depositDate?: string;
   error?: 'no_json' | 'unsupported_format' | 'fetch_failed';

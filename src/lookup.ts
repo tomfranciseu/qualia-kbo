@@ -2,7 +2,7 @@ import { createKboClient } from './client';
 import type { KboAddress, KboContact, KboLookupResult } from './types';
 import { formatEnterpriseNumber, getBelgianEnterpriseNumberFromVat } from './vat';
 
-type EnterpriseRow = { enterpriseNumber: string; status: string | null; juridicalForm: string | null };
+type EnterpriseRow = { enterpriseNumber: string; status: string | null; juridicalSituation: string | null; startDate: string | null; juridicalForm: string | null };
 type AddressRow = { streetNL: string | null; streetFR: string | null; houseNumber: string | null; zipcode: string | null; municipalityNL: string | null; municipalityFR: string | null; countryNL: string | null; countryFR: string | null };
 
 function mapAddress(address: AddressRow): KboAddress {
@@ -11,7 +11,7 @@ function mapAddress(address: AddressRow): KboAddress {
 
 async function findEnterprise(where: string, values: unknown[]): Promise<KboLookupResult | null> {
   const db = await createKboClient();
-  const [enterprise] = await db.all<EnterpriseRow>(`SELECT e."enterpriseNumber", status."description" AS status, form."description" AS "juridicalForm" FROM "Enterprise" e LEFT JOIN "Code" status ON status."category" = 'Status' AND status."code" = e."KBOstatusCode" LEFT JOIN "Code" form ON form."category" = 'JuridicalForm' AND form."code" = e."juridicalFormCode" WHERE ${where} LIMIT 1`, values);
+  const [enterprise] = await db.all<EnterpriseRow>(`SELECT e."enterpriseNumber", status."description" AS status, situation."description" AS "juridicalSituation", strftime(e."startDate", '%Y-%m-%d') AS "startDate", coalesce(form."description", cacForm."description") AS "juridicalForm" FROM "Enterprise" e LEFT JOIN "Code" status ON status."category" = 'Status' AND status."code" = e."KBOstatusCode" LEFT JOIN "Code" situation ON situation."category" = 'JuridicalSituation' AND situation."code" = e."juridicalSituationCode" LEFT JOIN "Code" form ON form."category" = 'JuridicalForm' AND form."code" = e."juridicalFormCode" LEFT JOIN "Code" cacForm ON cacForm."category" = 'JuridicalForm' AND cacForm."code" = e."juridicalFormCACCode" WHERE ${where} LIMIT 1`, values);
   if (!enterprise) return null;
   const [denominations, addresses, contacts] = await Promise.all([
     db.all<{ languageCode: string; denomination: string }>('SELECT "languageCode", "denomination" FROM "Denomination" WHERE "enterpriseId" = $1', [enterprise.enterpriseNumber]),
@@ -20,7 +20,7 @@ async function findEnterprise(where: string, values: unknown[]): Promise<KboLook
   ]);
   const nl = denominations.find((d) => d.languageCode === 'NL');
   const mappedContacts: KboContact[] = contacts.map((contact) => ({ type: contact.type ?? '', value: contact.value }));
-  return { enterpriseNumber: enterprise.enterpriseNumber, name: nl?.denomination ?? denominations[0]?.denomination ?? '', addresses: addresses.map(mapAddress), contacts: mappedContacts, juridicalForm: enterprise.juridicalForm ?? undefined, status: enterprise.status ?? undefined };
+  return { enterpriseNumber: enterprise.enterpriseNumber, name: nl?.denomination ?? denominations[0]?.denomination ?? '', addresses: addresses.map(mapAddress), contacts: mappedContacts, juridicalForm: enterprise.juridicalForm ?? undefined, juridicalSituation: enterprise.juridicalSituation ?? undefined, startDate: enterprise.startDate ?? undefined, status: enterprise.status ?? undefined };
 }
 
 export async function lookupByEnterpriseNumber(enterpriseNumber: string, databasePath?: string): Promise<KboLookupResult | null> {

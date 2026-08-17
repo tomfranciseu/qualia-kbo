@@ -17,5 +17,7 @@ export type KboLookupResult = {
   addresses: KboAddress[];
   contacts: KboContact[];
   juridicalForm?: string;
+  juridicalSituation?: string;
+  startDate?: string;
   status?: string;
 };

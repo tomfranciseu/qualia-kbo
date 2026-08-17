@@ -1,11 +1,11 @@
 import { createKboClient } from './client';
 
 export type ListEnterprisesByNaceOptions = { naceVersion?: string; classification?: string; limit?: number; offset?: number; /** @deprecated Pass KBO_DATABASE_PATH instead. */ databaseUrl?: string; databasePath?: string };
-export type KboNaceEnterpriseHit = { enterpriseNumber: string; name: string; city?: string; status?: string; juridicalForm?: string; naceCodes: string[]; classifications: string[] };
+export type KboNaceEnterpriseHit = { enterpriseNumber: string; name: string; city?: string; status?: string; juridicalSituation?: string; startDate?: string; juridicalForm?: string; naceCodes: string[]; classifications: string[] };
 export type ListEnterprisesByNaceResult = { enterprises: KboNaceEnterpriseHit[]; total: number };
 export type NaceActivityFilter = { naceCode: string; naceVersion?: string; classification?: string };
 export type EnterprisesByPostalCodeRow = { postalCode: string; enterpriseCount: number };
-export type NacePostalEnterprise = { enterpriseNumber: string; name: string; postalCode: string };
+export type NacePostalEnterprise = { enterpriseNumber: string; name: string; postalCode: string; status?: string; juridicalSituation?: string; startDate?: string; juridicalForm?: string };
 
 export async function listEnterprisesByNaceCode(naceCode: string, options: ListEnterprisesByNaceOptions = {}): Promise<ListEnterprisesByNaceResult> {
   const code = naceCode.trim();
@@ -21,14 +21,16 @@ export async function listEnterprisesByNaceCode(naceCode: string, options: ListE
   const hits = await db.all<{ enterpriseNumber: string }>(`WITH hits AS (${source}) SELECT "enterpriseNumber" FROM hits ORDER BY "enterpriseNumber" LIMIT $4 OFFSET $5`, [...params, limit, offset]);
   if (hits.length === 0) return { enterprises: [], total: Number(total) };
   const enterprises = await Promise.all(hits.map(async ({ enterpriseNumber }) => {
-    const [row] = await db.all<{ name: string | null; city: string | null; status: string | null; juridicalForm: string | null }>(`SELECT coalesce((SELECT d."denomination" FROM "Denomination" d WHERE d."enterpriseId" = e."enterpriseNumber" ORDER BY CASE d."languageCode" WHEN 'NL' THEN 0 WHEN 'FR' THEN 1 ELSE 2 END, d."typeOfDenominationCode" LIMIT 1), '') AS name, coalesce(address."municipalityNL", address."municipalityFR") AS city, status."description" AS status, form."description" AS "juridicalForm" FROM "Enterprise" e LEFT JOIN "KBOAddress" address ON address."enterpriseId" = e."enterpriseNumber" LEFT JOIN "Code" status ON status."category" = 'Status' AND status."code" = e."KBOstatusCode" LEFT JOIN "Code" form ON form."category" = 'JuridicalForm' AND form."code" = e."juridicalFormCode" WHERE e."enterpriseNumber" = $1 LIMIT 1`, [enterpriseNumber]);
-    return row ? { enterpriseNumber, name: row.name ?? '', city: row.city ?? undefined, status: row.status ?? undefined, juridicalForm: row.juridicalForm ?? undefined, naceCodes: [code], classifications: classification ? [classification] : [] } : null;
+    const [row] = await db.all<{ name: string | null; city: string | null; status: string | null; juridicalSituation: string | null; startDate: string | null; juridicalForm: string | null }>(`SELECT coalesce((SELECT d."denomination" FROM "Denomination" d WHERE d."enterpriseId" = e."enterpriseNumber" ORDER BY CASE d."languageCode" WHEN 'NL' THEN 0 WHEN 'FR' THEN 1 ELSE 2 END, d."typeOfDenominationCode" LIMIT 1), '') AS name, coalesce(address."municipalityNL", address."municipalityFR") AS city, status."description" AS status, situation."description" AS "juridicalSituation", strftime(e."startDate", '%Y-%m-%d') AS "startDate", coalesce(form."description", cacForm."description") AS "juridicalForm" FROM "Enterprise" e LEFT JOIN "KBOAddress" address ON address."enterpriseId" = e."enterpriseNumber" LEFT JOIN "Code" status ON status."category" = 'Status' AND status."code" = e."KBOstatusCode" LEFT JOIN "Code" situation ON situation."category" = 'JuridicalSituation' AND situation."code" = e."juridicalSituationCode" LEFT JOIN "Code" form ON form."category" = 'JuridicalForm' AND form."code" = e."juridicalFormCode" LEFT JOIN "Code" cacForm ON cacForm."category" = 'JuridicalForm' AND cacForm."code" = e."juridicalFormCACCode" WHERE e."enterpriseNumber" = $1 LIMIT 1`, [enterpriseNumber]);
+    return row ? { enterpriseNumber, name: row.name ?? '', city: row.city ?? undefined, status: row.status ?? undefined, juridicalSituation: row.juridicalSituation ?? undefined, startDate: row.startDate ?? undefined, juridicalForm: row.juridicalForm ?? undefined, naceCodes: [code], classifications: classification ? [classification] : [] } : null;
   }));
   return { total: Number(total), enterprises: enterprises.filter((row) => row !== null).map((row) => ({
     enterpriseNumber: row.enterpriseNumber,
     name: row.name,
     ...(row.city ? { city: row.city } : {}),
     ...(row.status ? { status: row.status } : {}),
+    ...(row.juridicalSituation ? { juridicalSituation: row.juridicalSituation } : {}),
+    ...(row.startDate ? { startDate: row.startDate } : {}),
     ...(row.juridicalForm ? { juridicalForm: row.juridicalForm } : {}),
     naceCodes: row.naceCodes,
     classifications: row.classifications,
@@ -104,12 +106,17 @@ export async function listEnterprisesByNaceAndPostalCode(naceCode: string, posta
       WHERE d."enterpriseId" = hits."enterpriseNumber"
       ORDER BY CASE d."languageCode" WHEN 'NL' THEN 0 WHEN 'FR' THEN 1 ELSE 2 END, d."typeOfDenominationCode"
       LIMIT 1
-    ), '') AS "name", $2 AS "postalCode"
+    ), '') AS "name", $2 AS "postalCode", status."description" AS "status", situation."description" AS "juridicalSituation", strftime(e."startDate", '%Y-%m-%d') AS "startDate", coalesce(form."description", cacForm."description") AS "juridicalForm"
     FROM hits
+    JOIN "Enterprise" e ON e."enterpriseNumber" = hits."enterpriseNumber"
     JOIN "KBOAddress" address
       ON address."enterpriseId" = hits."enterpriseNumber"
       AND address."typeOfAddressCode" = 'REGO'
       AND address."zipcode" = $2
+    LEFT JOIN "Code" status ON status."category" = 'Status' AND status."code" = e."KBOstatusCode"
+    LEFT JOIN "Code" situation ON situation."category" = 'JuridicalSituation' AND situation."code" = e."juridicalSituationCode"
+    LEFT JOIN "Code" form ON form."category" = 'JuridicalForm' AND form."code" = e."juridicalFormCode"
+    LEFT JOIN "Code" cacForm ON cacForm."category" = 'JuridicalForm' AND cacForm."code" = e."juridicalFormCACCode"
     ORDER BY hits."enterpriseNumber"
   `, [code, postcode, version, classification]);
 }
