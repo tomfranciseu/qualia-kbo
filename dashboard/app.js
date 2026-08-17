@@ -1,5 +1,5 @@
 const $ = (selector) => document.querySelector(selector);
-const state = { postcodes: [], companies: [], financialRows: [], naceCodes: [], reportRun: null, localReportRows: [], reportColumns: [], reportView: 'rows', pivotValue: 'revenue', loadedReportSelection: null, selectedPostalCode: '' };
+const state = { postcodes: [], companies: [], financialRows: [], naceCodes: [], reportRun: null, localReportRows: [], reportColumns: [], reportView: 'rows', pivotValue: 'revenue', loadedReportSelection: null, selectedPostalCode: '', postcodeTotal: 0 };
 const number = new Intl.NumberFormat('en-BE');
 const currency = new Intl.NumberFormat('en-BE', { style: 'currency', currency: 'EUR', notation: 'compact', maximumFractionDigits: 1 });
 let naceSearchTimer;
@@ -19,6 +19,33 @@ function metric(label, value, hint = '') { return `<div class="metric"><p>${labe
 function bars(target, rows, label, value, formatter = number.format, onSelect) { const maximum = Math.max(...rows.map(value), 1); const chart = $(target); chart.innerHTML = rows.length ? rows.map((row) => `<div class="bar${onSelect ? ' selectable-bar' : ''}"${onSelect ? ` role="button" tabindex="0" data-value="${escapeHtml(label(row))}" aria-label="Analyse postal code ${escapeHtml(label(row))}"` : ''}><span class="bar-label" title="${escapeHtml(label(row))}">${escapeHtml(label(row))}</span><div class="bar-track"><div class="bar-fill" style="width:${Math.max(3, value(row) / maximum * 100)}%"></div></div><span class="bar-value">${formatter(value(row))}</span></div>`).join('') : '<p class="empty">No matching records.</p>';
   chart.onclick = onSelect ? (event) => { const bar = event.target.closest('[data-value]'); if (bar) onSelect(bar.dataset.value); } : null;
   chart.onkeydown = onSelect ? (event) => { if (event.key !== 'Enter' && event.key !== ' ') return; const bar = event.target.closest('[data-value]'); if (bar) { event.preventDefault(); onSelect(bar.dataset.value); } } : null;
+}
+
+function filteredPostcodes() {
+  const term = $('#postcodeSearch')?.value.trim().toLowerCase() ?? '';
+  const minimum = Math.max(1, Number($('#postcodeMinCount')?.value) || 1);
+  const sort = $('#postcodeSort')?.value || 'count-desc';
+  const rows = state.postcodes.filter((row) => row.postalCode !== 'Unknown' && row.enterpriseCount >= minimum && (!term || row.postalCode.toLowerCase().includes(term)));
+  rows.sort((left, right) => {
+    if (sort === 'count-asc') return left.enterpriseCount - right.enterpriseCount || left.postalCode.localeCompare(right.postalCode);
+    if (sort === 'code-asc') return left.postalCode.localeCompare(right.postalCode);
+    if (sort === 'code-desc') return right.postalCode.localeCompare(left.postalCode);
+    return right.enterpriseCount - left.enterpriseCount || left.postalCode.localeCompare(right.postalCode);
+  });
+  return rows;
+}
+
+function renderPostcodePivot() {
+  const rows = filteredPostcodes();
+  const total = state.postcodeTotal || 1;
+  $('#postcodePivotCount').textContent = `${number.format(rows.length)} shown`;
+  $('#postcodePivotRows').innerHTML = rows.length
+    ? rows.map((row) => {
+      const share = (row.enterpriseCount / total) * 100;
+      const selected = row.postalCode === state.selectedPostalCode ? ' class="selected-row"' : '';
+      return `<tr${selected} data-postal="${escapeHtml(row.postalCode)}"><td>${escapeHtml(row.postalCode)}</td><td>${number.format(row.enterpriseCount)}</td><td>${share.toFixed(1)}%</td><td><button type="button" class="ghost row-action" data-postal="${escapeHtml(row.postalCode)}">Analyse</button></td></tr>`;
+    }).join('')
+    : '<tr><td colspan="4">No postal codes match the current filters.</td></tr>';
 }
 
 async function loadNaceCodes(search = '') {
@@ -71,11 +98,12 @@ async function analyse() {
     const missingPostcode = data.rows.find((row) => row.postalCode === 'Unknown')?.enterpriseCount ?? 0;
     const postcodeRows = data.rows.filter((row) => row.postalCode !== 'Unknown');
     const mappedTotal = total - missingPostcode;
+    state.postcodeTotal = total;
     const top = [...postcodeRows].sort((a, b) => b.enterpriseCount - a.enterpriseCount);
     const largest = top[0]; const share = total ? (largest?.enterpriseCount ?? 0) / total * 100 : 0;
     $('#kboMetrics').innerHTML = metric('Distinct enterprises', number.format(total), description || `NACE ${filters.naceCode}`) + metric('Postal-code markets', number.format(postcodeRows.length), `${number.format(mappedTotal)} with postcode`) + metric('No registered-office postcode', number.format(missingPostcode), missingPostcode ? 'Excluded from map' : 'All enterprises mapped') + metric('Largest postcode', largest?.postalCode ?? '—', largest ? `${number.format(largest.enterpriseCount)} enterprises` : 'No mapped addresses');
-    bars('#postcodeChart', top.slice(0, 10), (row) => row.postalCode, (row) => row.enterpriseCount, number.format, selectPostcodeForAnalysis);
-    $('#marketInsight').innerHTML = largest ? `<strong>${escapeHtml(largest.postalCode)}</strong> is the largest mapped pocket, with <strong>${number.format(largest.enterpriseCount)} enterprises</strong>. ${missingPostcode ? `<strong>${number.format(missingPostcode)}</strong> have no KBO registered-office address and are excluded.` : ''}` : 'No registered enterprises with a mapped registered-office postcode were found.';
+    renderPostcodePivot();
+    $('#marketInsight').innerHTML = largest ? `<strong>${escapeHtml(largest.postalCode)}</strong> is the largest mapped pocket, with <strong>${number.format(largest.enterpriseCount)} enterprises</strong>. Filter the pivot table to isolate a NACE × postal-code combination, then analyse it. ${missingPostcode ? `<strong>${number.format(missingPostcode)}</strong> have no KBO registered-office address and are excluded.` : ''}` : 'No registered enterprises with a mapped registered-office postcode were found.';
     $('#coverageRing').style.setProperty('--progress', `${share}%`); $('#coverageRing span').textContent = `${share.toFixed(0)}%`;
     updateReportCommand();
   } catch (error) { alert(error.message); } finally { $('#analyse').innerHTML = 'Analyse KBO data <span>→</span>'; }
@@ -84,6 +112,7 @@ async function analyse() {
 function selectPostcodeForAnalysis(postalCode) {
   state.selectedPostalCode = postalCode;
   $('#reportPostalCode').value = postalCode;
+  renderPostcodePivot();
   updateReportCommand();
   void loadCompanies();
   $('#companiesSection').scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -174,11 +203,17 @@ function renderFinancials() {
 }
 
 $('#analyse').addEventListener('click', analyse); $('#showCompanies').addEventListener('click', loadCompanies); $('#companySearch').addEventListener('input', renderCompanies); $('#csvFile').addEventListener('change', (event) => loadFinancialFile(event.target.files[0])); $('#applyFinancialFilters').addEventListener('click', renderFinancials);
+$('#postcodeSearch').addEventListener('input', renderPostcodePivot); $('#postcodeSort').addEventListener('change', renderPostcodePivot); $('#postcodeMinCount').addEventListener('input', renderPostcodePivot);
+$('#postcodePivotRows').addEventListener('click', (event) => {
+  const action = event.target.closest('[data-postal]');
+  if (!action) return;
+  selectPostcodeForAnalysis(action.dataset.postal);
+});
 $('#naceVersion').addEventListener('change', () => { void selectVersion(); });
 $('#naceCode').addEventListener('input', () => { clearTimeout(naceSearchTimer); naceSearchTimer = setTimeout(() => { void loadNaceCodes($('#naceCode').value.trim()); }, 180); });
 $('#naceCode').addEventListener('change', () => { updateNaceDescription(); updateReportCommand(); });
 document.querySelectorAll('[data-nace]').forEach((button) => button.addEventListener('click', async () => { $('#naceVersion').value = '2025'; await selectVersion(); await loadNaceCodes(button.dataset.nace); $('#naceCode').value = button.dataset.nace; updateNaceDescription(); analyse(); }));
-$('#reportPostalCode').addEventListener('input', () => { state.selectedPostalCode = $('#reportPostalCode').value.trim(); updateReportCommand(); }); $('#fieldOptions').querySelectorAll('input').forEach((input) => input.addEventListener('change', updateReportCommand)); $('#advancedFieldOptions').querySelectorAll('input').forEach((input) => input.addEventListener('change', updateReportCommand)); $('#runReport').addEventListener('click', () => { void runReport(); }); $('#exportLocalReport').addEventListener('click', exportLocalReport);
+$('#reportPostalCode').addEventListener('input', () => { state.selectedPostalCode = $('#reportPostalCode').value.trim(); renderPostcodePivot(); updateReportCommand(); }); $('#fieldOptions').querySelectorAll('input').forEach((input) => input.addEventListener('change', updateReportCommand)); $('#advancedFieldOptions').querySelectorAll('input').forEach((input) => input.addEventListener('change', updateReportCommand)); $('#runReport').addEventListener('click', () => { void runReport(); }); $('#exportLocalReport').addEventListener('click', exportLocalReport);
 $('#reportView').addEventListener('change', () => { state.reportView = $('#reportView').value; renderLocalReport(); }); $('#pivotValue').addEventListener('change', () => { state.pivotValue = $('#pivotValue').value; renderLocalReport(); });
 const dropZone = $('#dropZone'); ['dragenter','dragover'].forEach((event) => dropZone.addEventListener(event, (e) => { e.preventDefault(); dropZone.classList.add('drag'); })); ['dragleave','drop'].forEach((event) => dropZone.addEventListener(event, (e) => { e.preventDefault(); dropZone.classList.remove('drag'); })); dropZone.addEventListener('drop', (event) => loadFinancialFile(event.dataTransfer.files[0]));
 renderHistoryYears(); void selectVersion(); checkHealth();

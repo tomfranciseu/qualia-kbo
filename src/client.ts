@@ -38,7 +38,9 @@ let postgresTransactionClient: PoolClient | undefined;
 let storage: KboStorage | undefined;
 let databaseLocation: string | undefined;
 let transactionDepth = 0;
-const MAX_PARAMETERS_PER_INSERT = 10_000;
+/** Postgres caps bind params near 65k; DuckDB can take larger inserts for 100k-row CSV batches. */
+const MAX_PARAMETERS_PER_INSERT_POSTGRES = 60_000;
+const MAX_PARAMETERS_PER_INSERT_DUCKDB = 1_000_000;
 
 function isPostgresUrl(value: string | undefined): boolean {
   return Boolean(value && /^postgres(?:ql)?:\/\//i.test(value));
@@ -141,7 +143,8 @@ export async function checkKboDatabaseHealth(path = process.env.KBO_DATABASE_PAT
 export async function insertMany(table: string, columns: string[], rows: unknown[][], conflictClause = 'ON CONFLICT DO NOTHING'): Promise<void> {
   if (rows.length === 0) return;
   const db = await createKboClient();
-  const chunkSize = Math.max(1, Math.floor(MAX_PARAMETERS_PER_INSERT / columns.length));
+  const maxParameters = storage === 'postgres' ? MAX_PARAMETERS_PER_INSERT_POSTGRES : MAX_PARAMETERS_PER_INSERT_DUCKDB;
+  const chunkSize = Math.max(1, Math.floor(maxParameters / columns.length));
   await db.transaction(async () => {
     for (let offset = 0; offset < rows.length; offset += chunkSize) {
       const batch = rows.slice(offset, offset + chunkSize);

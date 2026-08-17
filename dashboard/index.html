@@ -28,7 +28,21 @@
         <div class="section-title"><div><p class="eyebrow">KBO ACTIVITY MAP</p><h2 id="selectionTitle">Market footprint</h2><p id="selectionDescription"></p></div><button id="showCompanies" class="ghost">View companies <span>→</span></button></div>
         <div class="metric-grid" id="kboMetrics"></div>
         <div class="dashboard-grid two-one">
-          <article class="panel chart-panel"><div class="panel-header"><div><h3>Where activity clusters</h3><p>Distinct enterprises by registered-office postal code · select a postal code to analyse it</p></div><span class="pill">Top 10</span></div><div id="postcodeChart" class="bar-chart"></div></article>
+          <article class="panel chart-panel">
+            <div class="panel-header">
+              <div>
+                <h3>Postal-code pivot</h3>
+                <p>Enterprise counts by registered-office postal code · filter and select a combination to analyse</p>
+              </div>
+              <span class="pill" id="postcodePivotCount">—</span>
+            </div>
+            <div class="result-toolbar kbo-pivot-toolbar">
+              <label>Search postal code<input id="postcodeSearch" type="search" placeholder="e.g. 1000 or 9000"></label>
+              <label>Sort<select id="postcodeSort"><option value="count-desc">Count · high to low</option><option value="count-asc">Count · low to high</option><option value="code-asc">Postal code · A–Z</option><option value="code-desc">Postal code · Z–A</option></select></label>
+              <label>Min. enterprises<input id="postcodeMinCount" type="number" min="1" value="1"></label>
+            </div>
+            <div class="table-wrap"><table><thead><tr><th>Postal code</th><th>Enterprises</th><th>Share</th><th></th></tr></thead><tbody id="postcodePivotRows"></tbody></table></div>
+          </article>
           <article class="panel insight-panel"><p class="eyebrow">MARKET SIGNAL</p><div id="marketInsight" class="insight-copy"></div><div class="ring" id="coverageRing"><span>—</span><small>top share</small></div></article>
         </div>
       </section>

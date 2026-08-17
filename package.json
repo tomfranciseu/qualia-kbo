@@ -26,6 +26,7 @@
     "check:types": "tsc --noEmit",
     "test": "vitest run",
     "load:all": "tsx src/load/run-all.ts",
+    "load:missing": "tsx src/load/run-missing.ts",
     "load:delete": "tsx src/load/run-file.ts delete",
     "load:code": "tsx src/load/run-file.ts code",
     "load:codes": "npm run load:code",

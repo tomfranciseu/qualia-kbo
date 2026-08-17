@@ -77,6 +77,13 @@ footer { color:#6f819b; }
 .selectable-bar { cursor:pointer; border-radius:6px; padding:3px 5px; margin:0 -5px; transition:background-color .15s; }
 .selectable-bar:hover,.selectable-bar:focus { background:#e7effa; outline:none; }
 .selectable-bar:focus-visible { outline:2px solid var(--orange); outline-offset:2px; }
+.kbo-pivot-toolbar { margin:-4px 0 14px; }
+.kbo-pivot-toolbar label { color:#385b8f; min-width:140px; }
+.kbo-pivot-toolbar input,.kbo-pivot-toolbar select { padding:8px; }
+#postcodePivotRows tr { cursor:pointer; }
+#postcodePivotRows tr:hover { background:#f0f5fb; }
+#postcodePivotRows tr.selected-row { background:#e2edf9; }
+#postcodePivotRows .row-action { padding:5px 9px; font-size:10px; }
 .enterprise-count { color:#fff; border:1px solid #607eaf; border-radius:99px; padding:6px 9px; font:10px 'DM Mono',monospace; white-space:nowrap; }
 .report-options { margin-bottom:15px; border:1px solid var(--line); border-radius:9px; background:#f8fbff; }
 .report-options > summary { cursor:pointer; padding:12px 14px; color:var(--ink); font-size:12px; font-weight:800; }

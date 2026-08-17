@@ -1,4 +1,4 @@
-import { createKboClient } from '../client';
+import { insertMany } from '../client';
 import { determineEntityType } from './helper';
 import { readCsvBatches } from './csv';
 
@@ -20,10 +20,5 @@ export async function loadActivityCSV(filename: string, upsertMode: boolean): Pr
     if (!row.EntityNumber || !row.NaceCode) return;
     const activity = rowToActivityInput(row);
     return [activity.entityNumber, activity.activityGroupCode, activity.naceVersion, activity.naceCode, activity.classification, activity.enterpriseId ?? null, activity.establishmentId ?? null];
-  }, async (batch) => {
-    const db = await createKboClient();
-    const columns = ['entityNumber', 'activityGroupCode', 'naceVersion', 'naceCode', 'classification', 'enterpriseId', 'establishmentId'];
-    const placeholders = batch.map((row, rowIndex) => `(${row.map((_, columnIndex) => `$${rowIndex * columns.length + columnIndex + 1}`).join(', ')})`).join(', ');
-    await db.run(`INSERT INTO "Activity" (${columns.map((column) => `"${column}"`).join(', ')}) VALUES ${placeholders} ${conflictClause}`, batch.flat());
-  }, 'Activity', 1_400);
+  }, (batch) => insertMany('Activity', ['entityNumber', 'activityGroupCode', 'naceVersion', 'naceCode', 'classification', 'enterpriseId', 'establishmentId'], batch, conflictClause), 'Activity');
 }

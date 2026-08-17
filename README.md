@@ -28,6 +28,7 @@ npm run load:all
 | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
 | `npm run db:init`                                                                                                                                                              | Create/upgrade the local DuckDB schema                                                 |
 | `npm run load:all`                                                                                                                                                             | Full ETL pipeline (add`--upsert` for upsert mode)                                    |
+| `npm run load:missing`                                                                                                                                                         | Load only empty or incomplete tables (skips tables that already match the CSV; add `--upsert` for upsert mode) |
 | `npm run load:code`, `load:enterprise`, `load:establishment`, `load:address`, `load:contact`, `load:denomination`, `load:branch`, `load:activity`, `load:meta` | Import one corresponding CSV file from`data/`                                        |
 | `npm run load:activity`                                                                                                                                                        | Load`data/activity.csv` only (NACE-BEL activities)                                   |
 | `npm run load:audit`                                                                                                                                                           | Compare every loaded table with its eligible, de-duplicated CSV rows                   |
@@ -84,7 +85,7 @@ Start the dashboard after loading the KBO tables:
 npm run dashboard
 ```
 
-Open `http://localhost:4173` in a browser. Select a NACE-BEL version and activity, then analyse its postcode clusters. Select a postcode in the cluster chart to open the matching enterprise list. Beneath that list, expand **NBB report options** to choose fiscal years and financial fields, then run the NBB report.
+Open `http://localhost:4173` in a browser. Select a NACE-BEL version and activity, then use the postal-code pivot to filter, sort, and select a market combination. Click a postal code (or Analyse) to open the matching enterprise list. Beneath that list, expand **NBB report options** to choose fiscal years and financial fields, then run the NBB report.
 
 Completed dashboard reports are stored in local DuckDB. Returning to the same NACE activity, classification, postcode, years, and fields loads the latest saved result instead of requesting NBB again. Use the results table's **Columns** control to choose displayed measures or **Pivot by company** to compare one measure by fiscal year. You can also drop a previously exported NBB CSV into the page for browser-only analysis; it is not uploaded to an external service. Set `KBO_DASHBOARD_PORT` if port `4173` is already in use.
 

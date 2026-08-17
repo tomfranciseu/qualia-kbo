@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import { createInterface } from 'node:readline';
 import Papa from 'papaparse';
 
-const DEFAULT_BATCH_SIZE = 10_000;
+const DEFAULT_BATCH_SIZE = 100_000;
 
 export async function countCsvDataRows(filename: string, label: string): Promise<number> {
   console.log(`${label}: counting CSV rows…`);
