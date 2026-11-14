@@ -1,3 +1,7 @@
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { createKboClient, disconnectKboClient } from '../src/client';
 import { describe, expect, it } from 'vitest';
 import { buildNaceActivityWhere, listEnterprisesByNaceCode } from '../src/activity';
 import { rowToActivityInput } from '../src/load/080_load_activity';
@@ -69,16 +73,25 @@ describe('listEnterprisesByNaceCode', () => {
     await expect(listEnterprisesByNaceCode('  ')).resolves.toEqual({ enterprises: [], total: 0 });
   });
 
-  it('lists enterprises when Activity table is loaded', async () => {
-    if (!process.env.KBO_DATABASE_URL) return;
+  it('lists enterprises with numeric pagination in an isolated database', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'qualia-kbo-activity-'));
+    const databasePath = join(directory, 'kbo.duckdb');
     try {
+      const db = await createKboClient(databasePath);
+      await db.run('INSERT INTO "Enterprise" ("enterpriseNumber") VALUES ($1)', ['0200.065.765']);
+      await db.run('INSERT INTO "Activity" VALUES ($1, $2, $3, $4, $5, $6, $7)',
+        ['0200.065.765', '006', '2025', '70200', 'MAIN', '0200.065.765', null]);
       const result = await listEnterprisesByNaceCode('70200', {
         naceVersion: '2025',
         classification: 'MAIN',
         limit: 5,
+        offset: 0,
+        databasePath,
       });
-      expect(result.total).toBeGreaterThanOrEqual(0);
-      expect(result.enterprises.length).toBeLessThanOrEqual(5);
+      expect(result.total).toBe(1);
+      expect(result.enterprises).toHaveLength(1);
+      await expect(listEnterprisesByNaceCode('70200', { databasePath, offset: 1 }))
+        .resolves.toEqual({ enterprises: [], total: 1 });
       for (const hit of result.enterprises) {
         expect(hit.enterpriseNumber).toMatch(/^\d{4}\.\d{3}\.\d{3}$/);
         expect(hit.naceCodes).toContain('70200');
@@ -91,6 +104,9 @@ describe('listEnterprisesByNaceCode', () => {
         return;
       }
       throw error;
+    } finally {
+      await disconnectKboClient();
+      await rm(directory, { recursive: true, force: true });
     }
   }, 60_000);
 });

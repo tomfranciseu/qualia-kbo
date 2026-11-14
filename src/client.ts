@@ -1,6 +1,6 @@
 import { mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
-import { DuckDBInstance, VARCHAR, type DuckDBConnection } from '@duckdb/node-api';
+import { DuckDBInstance, type DuckDBConnection, type DuckDBValue } from '@duckdb/node-api';
 import { Pool, type PoolClient } from 'pg';
 
 const defaultDatabasePath = resolve(process.env.LOCALAPPDATA ?? process.cwd(), 'qualia-kbo', 'kbo.duckdb');
@@ -110,11 +110,11 @@ export async function createKboClient(target = process.env.KBO_DATABASE_PATH): P
   return {
     async run(sql, values = []) {
       if (storage === 'postgres') { await (postgresTransactionClient ?? postgresPool)!.query(sql, values); return; }
-      await duckConnection!.run(sql, values as never[], values.map(() => VARCHAR));
+      await duckConnection!.run(sql, values as DuckDBValue[]);
     },
     async all<T>(sql: string, values: unknown[] = []) {
       if (storage === 'postgres') return (await (postgresTransactionClient ?? postgresPool)!.query(sql, values)).rows as T[];
-      const reader = await duckConnection!.runAndReadAll(sql, values as never[], values.map(() => VARCHAR));
+      const reader = await duckConnection!.runAndReadAll(sql, values as DuckDBValue[]);
       return reader.getRowObjectsJS() as T[];
     },
     async transaction<T>(action: () => Promise<T>) {

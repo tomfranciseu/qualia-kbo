@@ -33,3 +33,17 @@ describe('checkKboDatabaseHealth', () => {
     await expect(db.all<{ healthy: number }>('SELECT 1 AS healthy')).resolves.toEqual([{ healthy: 1 }]);
   });
 });
+
+describe('DuckDB parameter binding', () => {
+  it('binds mixed values for writes and paginated reads', async () => {
+    const db = await createKboClient(await testDatabasePath());
+    await db.run('CREATE TABLE binding_test (id INTEGER, label VARCHAR, active BOOLEAN, optional VARCHAR)');
+    await db.run('INSERT INTO binding_test VALUES ($1, $2, $3, $4)', [1, 'first', true, null]);
+    await db.run('INSERT INTO binding_test VALUES ($1, $2, $3, $4)', [2, 'second', false, 'present']);
+
+    await expect(db.all('SELECT * FROM binding_test ORDER BY id LIMIT $1 OFFSET $2', [1, 1]))
+      .resolves.toEqual([{ id: 2, label: 'second', active: false, optional: 'present' }]);
+    await expect(db.all('SELECT optional FROM binding_test WHERE id = $1', [1]))
+      .resolves.toEqual([{ optional: null }]);
+  });
+});

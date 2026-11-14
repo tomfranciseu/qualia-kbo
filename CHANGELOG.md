@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.1
+
+- Infer DuckDB parameter types so numeric pagination, booleans, and null values bind correctly.
+- Run the activity lookup regression test against an isolated database without requiring environment variables.
+- Add coverage for mixed-type writes and paginated reads.
+
 ## 0.4.0
 
 - Update dependencies, including DuckDB 2, dotenv 18, Prisma 7, TypeScript 7, and Vitest 5.
