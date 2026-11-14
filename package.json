@@ -1,6 +1,6 @@
 {
   "name": "@qualia/kbo",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": false,
   "type": "module",
   "description": "Belgian KBO registry — standalone DB, ETL, and lookup",
@@ -45,18 +45,18 @@
     "dashboard": "tsx src/dashboard/server.ts"
   },
   "dependencies": {
-    "@duckdb/node-api": "^1.5.5-r.3",
-    "dotenv": "^17.4.2",
-    "papaparse": "^5.5.3",
+    "@duckdb/node-api": "^2.0.0-r.1",
+    "dotenv": "^18.0.10",
+    "papaparse": "^5.7.1",
     "pdf-parse": "^2.4.5",
-    "pg": "^8.20.0"
+    "pg": "^8.23.1"
   },
   "devDependencies": {
     "@types/papaparse": "^5.5.2",
-    "@types/pg": "^8.20.0",
-    "prisma": "^6.19.3",
-    "tsx": "^4.21.0",
-    "typescript": "^6.0.3",
-    "vitest": "^4.1.5"
+    "@types/pg": "^8.23.1",
+    "prisma": "^7.10.1",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vitest": "^5.1.0"
   }
 }

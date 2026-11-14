@@ -64,7 +64,7 @@ For multiple read-only processes, initialize the database first, then set `KBO_D
 ## Consumption from monday2.0
 
 ```json
-"@qualia/kbo": "github:tomfranciseu/qualia-kbo#v0.3.0"
+"@qualia/kbo": "github:tomfranciseu/qualia-kbo#v0.4.0"
 ```
 
 Set `KBO_DATABASE_PATH` on the app runtime for Belgian VAT autofill from local KBO data. Without it, the app falls back to VIES.

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.0
+
+- Update dependencies, including DuckDB 2, dotenv 18, Prisma 7, TypeScript 7, and Vitest 5.
+- Refresh the lockfile and replace private Artifactory URLs with public npm registry URLs.
+- Resolve dependency audit findings.
+
 ## 0.3.1
 
 - Fix CI typecheck: use `moduleResolution: bundler` so extensionless imports stay Next.js-compatible
