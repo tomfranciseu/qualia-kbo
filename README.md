@@ -19,7 +19,7 @@ npm run load:all
 | `KBO_STORAGE`               | `duckdb`                               | Storage backend: `duckdb` for local use or `postgres` for a shared PostgreSQL database. |
 | `KBO_DATABASE_PATH`         | `%LOCALAPPDATA%/qualia-kbo/kbo.duckdb` | Persisted DuckDB file when `KBO_STORAGE=duckdb`. Set it to a non-OneDrive local folder on corporate devices. |
 | `KBO_DUCKDB_ACCESS_MODE`    | `read_write`                            | Use `read_only` only when every process accessing the same DuckDB file is read-only. |
-| `KBO_DATABASE_URL`          | —                                      | PostgreSQL connection string when `KBO_STORAGE=postgres`. |
+| `KBO_DATABASE_URL`          | —                                      | PostgreSQL connection string; selected automatically when no DuckDB file is configured. |
 | `NBB_CBSO_SUBSCRIPTION_KEY` | —                                       | NBB CBSO API subscription key (annual accounts)                                    |
 | `NBB_CBSO_BASE_URL`         | `https://ws.cbso.nbb.be`               | NBB CBSO API base URL (UAT:`https://ws.uat2.cbso.nbb.be`)                        |
 
@@ -27,7 +27,7 @@ npm run load:all
 
 | Script                                                                                                                                                                           | Description                                                                            |
 | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| `npm run db:init`                                                                                                                                                              | Create/upgrade the local DuckDB schema                                                 |
+| `npm run db:init`                                                                                                                                                              | Initialize the configured backend (loads `.env`)                                                 |
 | `npm run load:all`                                                                                                                                                             | Full ETL pipeline (add`--upsert` for upsert mode)                                    |
 | `npm run load:missing`                                                                                                                                                         | Load only empty or incomplete tables (skips tables that already match the CSV; add `--upsert` for upsert mode) |
 | `npm run load:code`, `load:enterprise`, `load:establishment`, `load:address`, `load:contact`, `load:denomination`, `load:branch`, `load:activity`, `load:meta` | Import one corresponding CSV file from`data/`                                        |
@@ -45,15 +45,20 @@ DuckDB is the default and suits a single-user local installation. To use Postgre
 
 ```bash
 docker compose up -d
-KBO_STORAGE=postgres
-KBO_DATABASE_URL=postgresql://kbo:kbo@localhost:5436/kbo
+export KBO_STORAGE=postgres
+export KBO_DATABASE_URL=postgresql://kbo:kbo@localhost:5436/kbo
 npm run db:init
 npm run load:all
 ```
 
 On PowerShell, set the two variables with `$env:KBO_STORAGE = 'postgres'` and `$env:KBO_DATABASE_URL = 'postgresql://kbo:kbo@localhost:5436/kbo'`. Each deployment uses one active backend at a time; the application does not automatically synchronize DuckDB and PostgreSQL data.
 
-To run the optional PostgreSQL integration test on a machine with a PostgreSQL instance, set `KBO_POSTGRES_TEST_URL` to a disposable database connection string before running `npm test`.
+The included PostgreSQL port binds to localhost only. Database init and the
+dashboard load `.env` from the current project directory.
+
+To run the optional PostgreSQL integration test on a machine with a PostgreSQL instance, set `KBO_POSTGRES_TEST_URL` to a disposable database connection string before running `npm test`. Tests cover both modern tables and the original Prisma
+schema using read-only connections; they refuse to modify an existing `kbo` schema.
+CI supplies a disposable PostgreSQL 17 service and runs these tests.
 
 ### DuckDB locking and concurrent use
 
@@ -64,10 +69,28 @@ For multiple read-only processes, initialize the database first, then set `KBO_D
 ## Consumption from monday2.0
 
 ```json
-"@qualia/kbo": "github:tomfranciseu/qualia-kbo#v0.4.1"
+"@qualia/kbo": "github:tomfranciseu/qualia-kbo#v0.4.2"
 ```
 
-Set `KBO_DATABASE_PATH` on the app runtime for Belgian VAT autofill from local KBO data. Without it, the app falls back to VIES.
+Monday uses `KBO_DATABASE_URL` to read its existing PostgreSQL registry. The client
+recognizes the original Prisma-managed `kbo` schema and reads it in place, including
+its separate code tables and mapped address columns. This path runs no DDL and
+works with read-only database connections. No data reload or database migration
+is required. Keep the existing ETL for this schema; the newer CSV loaders target
+the modern schema and reject writes to the legacy layout.
+
+For a local DuckDB file, set `KBO_DATABASE_PATH` instead. Each process uses one
+backend at a time. Monday falls back to VIES when no KBO URL is configured.
+
+The v0.4 API uses async `createKboClient()` with `all` / `run`, replacing the old
+Prisma client. Applications should use lookup functions and
+`searchEnterprisesByName(query, { limit })` rather than depending on database
+relations. Name search returns `{ enterpriseNumber, name, city?, status? }[]`,
+escapes literal `%`, `_` and `!`, deduplicates enterprises, orders by enterprise
+number and caps results at 100. VAT/enterprise lookups and NACE lists retain their
+public result shapes. PostgreSQL does not load DuckDB's native addon; Next.js
+consumers should externalize `@duckdb/node-api` and `@duckdb/node-bindings` for
+build-time handling of the optional DuckDB branch.
 
 ### Search enterprises by NACE-BEL
 

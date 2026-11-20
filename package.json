@@ -1,6 +1,6 @@
 {
   "name": "@qualia/kbo",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "private": false,
   "type": "module",
   "description": "Belgian KBO registry — standalone DB, ETL, and lookup",
@@ -16,10 +16,11 @@
     "src/vat.ts",
     "src/nbb",
     "src/generated",
-    "prisma"
+    "prisma",
+    "src/registrySql.ts"
   ],
   "scripts": {
-    "db:init": "tsx -e \"import('./src/client.ts').then(async ({ createKboClient, disconnectKboClient }) => { await createKboClient(); await disconnectKboClient(); console.log('DuckDB database initialized.'); })\"",
+    "db:init": "tsx -r dotenv/config -e \"import('./src/client.ts').then(async ({ createKboClient, disconnectKboClient }) => { await createKboClient(); await disconnectKboClient(); console.log('KBO database initialized.'); })\"",
     "migrate:dev": "npm run db:init",
     "migrate:deploy": "npm run db:init",
     "migrate:status": "npm run db:init",

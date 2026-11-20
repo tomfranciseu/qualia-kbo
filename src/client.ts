@@ -1,6 +1,6 @@
 import { mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
-import { DuckDBInstance, type DuckDBConnection, type DuckDBValue } from '@duckdb/node-api';
+import type { DuckDBInstance, DuckDBConnection, DuckDBValue } from '@duckdb/node-api';
 import { Pool, type PoolClient } from 'pg';
 
 const defaultDatabasePath = resolve(process.env.LOCALAPPDATA ?? process.cwd(), 'qualia-kbo', 'kbo.duckdb');
@@ -25,6 +25,8 @@ CREATE INDEX IF NOT EXISTS "Denomination_name_idx" ON "Denomination" ("denominat
 const postgresSchema = schema;
 
 export type KboClient = {
+  /** Existing Prisma-managed kbo schema; registry reads must use its mapped sources. */
+  readonly legacyPostgres: boolean;
   run: (sql: string, values?: unknown[]) => Promise<void>;
   all: <T>(sql: string, values?: unknown[]) => Promise<T[]>;
   transaction: <T>(action: () => Promise<T>) => Promise<T>;
@@ -41,6 +43,8 @@ let storage: KboStorage | undefined;
 let databaseLocation: string | undefined;
 let duckDbAccessMode: DuckDbAccessMode | undefined;
 let transactionDepth = 0;
+let initialization: Promise<void> | undefined;
+let legacyPostgres = false;
 /** Postgres caps bind params near 65k; DuckDB can take larger inserts for 100k-row CSV batches. */
 const MAX_PARAMETERS_PER_INSERT_POSTGRES = 60_000;
 const MAX_PARAMETERS_PER_INSERT_DUCKDB = 1_000_000;
@@ -75,39 +79,49 @@ export function getKboDatabasePath(path = process.env.KBO_DATABASE_PATH): string
 }
 
 export function getKboDatabaseLocation(): string {
-  return databaseLocation ?? (getStorage() === 'postgres' ? getPostgresUrl() : getKboDatabasePath());
+  return databaseLocation ?? (getStorage(process.env.KBO_DATABASE_PATH?.trim() || process.env.KBO_DATABASE_URL?.trim()) === 'postgres' ? getPostgresUrl() : getKboDatabasePath());
 }
 
-export async function createKboClient(target = process.env.KBO_DATABASE_PATH): Promise<KboClient> {
+/** Connects to the selected backend, preserving existing Prisma-managed PostgreSQL data. */
+export async function createKboClient(target = process.env.KBO_DATABASE_PATH?.trim() || process.env.KBO_DATABASE_URL?.trim()): Promise<KboClient> {
   const selectedStorage = getStorage(target);
   const targetLocation = selectedStorage === 'postgres' ? getPostgresUrl(target) : getKboDatabasePath(target);
   const selectedDuckDbAccessMode = selectedStorage === 'duckdb' ? getDuckDbAccessMode() : undefined;
-  if (storage && (storage !== selectedStorage || databaseLocation !== targetLocation || duckDbAccessMode !== selectedDuckDbAccessMode)) throw new Error(`KBO database is already open at ${databaseLocation}`);
+  if (storage && (storage !== selectedStorage || databaseLocation !== targetLocation || duckDbAccessMode !== selectedDuckDbAccessMode)) throw new Error('KBO database is already open at a different location');
 
-  if (selectedStorage === 'duckdb' && !duckConnection) {
-    try {
-      if (selectedDuckDbAccessMode === 'read_write') mkdirSync(dirname(targetLocation), { recursive: true });
-      duckInstance = await DuckDBInstance.create(targetLocation, { access_mode: selectedDuckDbAccessMode === 'read_only' ? 'READ_ONLY' : 'READ_WRITE' });
-      duckConnection = await duckInstance.connect();
-      if (selectedDuckDbAccessMode === 'read_write') await duckConnection.run(schema);
-    } catch (error) {
-      duckConnection?.closeSync();
-      duckConnection = undefined;
-      duckInstance?.closeSync();
-      duckInstance = undefined;
-      const detail = error instanceof Error ? ` ${error.message}` : '';
-      throw new Error(`Cannot open DuckDB at ${targetLocation}. Another process may hold its write lock. Stop the dashboard, loader, or database viewer using this file; use KBO_DUCKDB_ACCESS_MODE=read_only only when every process is read-only; or use KBO_STORAGE=postgres for shared read/write access.${detail}`);
-    }
+  if (!initialization) {
+    storage = selectedStorage;
+    databaseLocation = targetLocation;
+    duckDbAccessMode = selectedDuckDbAccessMode;
+    initialization = (async () => {
+      if (selectedStorage === 'duckdb') {
+        try {
+          // PostgreSQL consumers must not load DuckDB's native addon.
+          const { DuckDBInstance } = await import('@duckdb/node-api');
+          if (selectedDuckDbAccessMode === 'read_write') mkdirSync(dirname(targetLocation), { recursive: true });
+          duckInstance = await DuckDBInstance.create(targetLocation, { access_mode: selectedDuckDbAccessMode === 'read_only' ? 'READ_ONLY' : 'READ_WRITE' });
+          duckConnection = await duckInstance.connect();
+          if (selectedDuckDbAccessMode === 'read_write') await duckConnection.run(schema);
+        } catch (error) {
+          const detail = error instanceof Error ? ` ${error.message}` : '';
+          throw new Error(`Cannot open DuckDB at ${targetLocation}. Another process may hold its write lock. Stop the dashboard, loader, or database viewer using this file; use KBO_DUCKDB_ACCESS_MODE=read_only only when every process is read-only; or use KBO_STORAGE=postgres for shared read/write access.${detail}`);
+        }
+      } else {
+        postgresPool = new Pool({ connectionString: targetLocation, connectionTimeoutMillis: 10_000 });
+        const { rows } = await postgresPool.query<{ legacy: boolean }>(`SELECT to_regclass('kbo."Enterprise"') IS NOT NULL AS legacy`);
+        legacyPostgres = rows[0].legacy;
+        // The legacy registry is read in place: no DDL, copying or data reload.
+        if (!legacyPostgres) await postgresPool.query(postgresSchema);
+      }
+    })().catch(async (error) => {
+      await disconnectKboClient();
+      throw error;
+    });
   }
-  if (selectedStorage === 'postgres' && !postgresPool) {
-    postgresPool = new Pool({ connectionString: targetLocation });
-    await postgresPool.query(postgresSchema);
-  }
-  storage = selectedStorage;
-  databaseLocation = targetLocation;
-  duckDbAccessMode = selectedDuckDbAccessMode;
+  await initialization;
 
   return {
+    legacyPostgres,
     async run(sql, values = []) {
       if (storage === 'postgres') { await (postgresTransactionClient ?? postgresPool)!.query(sql, values); return; }
       await duckConnection!.run(sql, values as DuckDBValue[]);
@@ -152,9 +166,11 @@ export async function disconnectKboClient(): Promise<void> {
   databaseLocation = undefined;
   duckDbAccessMode = undefined;
   transactionDepth = 0;
+  initialization = undefined;
+  legacyPostgres = false;
 }
 
-export async function checkKboDatabaseHealth(path = process.env.KBO_DATABASE_PATH): Promise<boolean> {
+export async function checkKboDatabaseHealth(path = process.env.KBO_DATABASE_PATH?.trim() || process.env.KBO_DATABASE_URL?.trim()): Promise<boolean> {
   try {
     const db = await createKboClient(path);
     await db.all('SELECT 1 AS healthy');
@@ -167,6 +183,7 @@ export async function checkKboDatabaseHealth(path = process.env.KBO_DATABASE_PAT
 export async function insertMany(table: string, columns: string[], rows: unknown[][], conflictClause = 'ON CONFLICT DO NOTHING'): Promise<void> {
   if (rows.length === 0) return;
   const db = await createKboClient();
+  if (db.legacyPostgres) throw new Error('Legacy PostgreSQL registry is read-only through this API; use its existing ETL to update data');
   const maxParameters = storage === 'postgres' ? MAX_PARAMETERS_PER_INSERT_POSTGRES : MAX_PARAMETERS_PER_INSERT_DUCKDB;
   const chunkSize = Math.max(1, Math.floor(maxParameters / columns.length));
   await db.transaction(async () => {

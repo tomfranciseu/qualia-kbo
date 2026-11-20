@@ -1,5 +1,5 @@
 export { createKboClient, disconnectKboClient, checkKboDatabaseHealth, getKboDatabaseLocation } from './client';
-export { lookupByEnterpriseNumber, lookupByName, lookupByVatNumber } from './lookup';
+export { lookupByEnterpriseNumber, lookupByName, lookupByVatNumber, searchEnterprisesByName } from './lookup';
 export { countEnterprisesByNacePostalCode, listEnterprisesByNaceAndPostalCode, listEnterprisesByNaceCode } from './activity';
 export type {
   EnterprisesByPostalCodeRow,
@@ -16,3 +16,6 @@ export type {
   NbbFinancialLookupResult,
   FetchCompanyFinancialsOptions,
 } from './nbb/types';
+
+export type { KboCompanySearchHit, SearchEnterprisesByNameOptions } from './lookup';
+export type { KboClient } from './client';
